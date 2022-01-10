@@ -328,7 +328,7 @@ int gpio_fd_close(int fd)
 {
 	return close(fd);
 }
-
+/*
 int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 {
 	char data_buffer;
@@ -344,7 +344,7 @@ int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 	xfer[0].len = 1;
 	xfer[0].bits_per_word = 8;
 	xfer[0].speed_hz = 1000000;
-	xfer[0].cs_change = 0;
+	xfer[0].cs_change = 1;
 	
 	xfer[1].rx_buf = (unsigned long) &recv_buffer;
 	xfer[1].tx_buf = 0;
@@ -352,6 +352,7 @@ int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 	xfer[1].bits_per_word = 8;
 	xfer[1].speed_hz = 1000000;
 	xfer[1].cs_change = 0;
+	xfer[1].rx_nbits = len * 8;	// EXPERIMENT WITH THIS
 
 	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(2), xfer);
 	printf("errno: %i \n", errno);
@@ -364,11 +365,6 @@ int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 	return 0;
 
 }
-
-/**
- *
- *	len = array length of data. 
- * */
 int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 {
 	char data_buffer[len + 1];
@@ -392,7 +388,7 @@ int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 	xfer[0].len = len + 1;
 	xfer[0].bits_per_word = 8;
 	xfer[0].speed_hz = 1000000;
-	xfer[0].cs_change = 0;
+	xfer[0].cs_change = 1;
 	
 	xfer[1].rx_buf = (unsigned long) &recv_buffer;
 	xfer[1].tx_buf = 0;
@@ -406,6 +402,67 @@ int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 
 
 	return 0;
+}
+*/
+
+int test_send(int spi_dev_fd, char addr, char * data, int len)
+{
+	char data_buffer[len + 1];
+	char recv_buffer;
+	struct spi_ioc_transfer xfer;	
+
+	memset(&xfer, 0, sizeof(xfer));
+	memset(&recv_buffer, 0, sizeof(recv_buffer));
+	
+	data_buffer[0] = addr;
+	printf("BUFF: %x\n", data_buffer[0]);
+	for(int i = 1; i < len + 1; ++i)
+	{
+		data_buffer[i] = data[i-1];
+		printf("BUFF: %x\n", data_buffer[i]);
+	}
+	xfer.tx_buf = (unsigned long) data_buffer;
+	xfer.rx_buf = (unsigned long) &recv_buffer;
+	xfer.len = len + 2;
+	xfer.bits_per_word = 8;
+	xfer.speed_hz = 1000000;
+	xfer.cs_change = 0;
+	xfer.rx_nbits = 8;	// EXPERIMENT WITH THIS
+	xfer.tx_nbits = 8 * len + 8;
+	
+	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(1), xfer);
+
+	return 0;
+
+}
+
+int test_read(int spi_dev_fd, char addr, char * copy_to, int len)
+{
+	char data_buffer;
+	char recv_buffer[len];
+	struct spi_ioc_transfer xfer;	
+
+	memset(&xfer, 0, sizeof(xfer));
+	memset(&recv_buffer, 0, sizeof(recv_buffer));
+
+	data_buffer = addr;
+	xfer.tx_buf = (unsigned long) &data_buffer;
+	xfer.rx_buf = (unsigned long) recv_buffer;
+	xfer.len = len + 1;
+	xfer.bits_per_word = 8;
+	xfer.speed_hz = 1000000;
+	xfer.cs_change = 0;
+	xfer.rx_nbits = len * 8;	// EXPERIMENT WITH THIS
+	xfer.tx_nbits = 8;
+	
+	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(1), xfer);
+	
+	if(recv_buffer[0])
+	{
+		strcpy(copy_to, recv_buffer);
+	}
+	return 0;
+
 }
 
 int main() 
@@ -422,7 +479,7 @@ int main()
 	// Setting (chip enable)
 	gpio_export(GPIO_CE);
 	gpio_set_dir(GPIO_CE, GPIO_DIR_OUTPUT);	// set gpio 4 as output.
-	gpio_set_edge(GPIO_CE, rising);
+	//gpio_set_edge(GPIO_CE, rising);
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
 
@@ -436,7 +493,7 @@ int main()
 	int spi_dev_fd = open(dev, O_RDWR);
 
 	printf("fd: %i\n", spi_dev_fd);
-	printf("%i \n", errno);
+	printf("errno: %i \n", errno);
 
 	if(errno)
 		return 0;
@@ -453,6 +510,46 @@ int main()
 	// Wait 100ms for power on reset.
 	usleep(100000);
 
+	char addr;
+	int len = 1;
+	char snd_msg[len];
+	memset(snd_msg, 0, sizeof(snd_msg));
+
+	// Power up transceiver.
+	addr = W_REGISTER | CONFIG;
+	snd_msg[0] = PWR_UP;
+	//spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+	test_send(spi_dev_fd, addr, snd_msg, 1);
+
+	// Waiting 1.5ms.
+	usleep(2000);
+
+
+	len = 3;
+	char msg[len];
+	memset(msg, 0, sizeof(msg));
+
+	//spi_read_msg(spi_dev_fd, FIFO_STATUS, msg, 2);
+	test_read(spi_dev_fd, FIFO_STATUS, msg, 2);
+
+	if(msg[0])
+		printf("msg0: %x \n", msg[0]);
+	if(msg[1])
+		printf("msg1: %x \n", msg[1]);
+
+
+	memset(msg, 0, sizeof(msg));
+
+	//spi_read_msg(spi_dev_fd, STATUS, msg, 1);
+	test_read(spi_dev_fd, STATUS, msg, 2);
+
+	if(msg[0])
+		printf("msg0: %x \n", msg[0]);
+	if(msg[1])
+		printf("msg1: %x \n", msg[1]);
+
+
+/*
 	char addr;
 	int len = 1;
 	char snd_msg[len];
@@ -492,7 +589,7 @@ int main()
 	addr = W_REGISTER | RX_PW_P0;
 	snd_msg[0] = RX_WIDTH;
 	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
+*/
 /*
 	addr = W_REGISTER | RX_PW_P1;
 	snd_msg[0] = RX_WIDTH;
@@ -514,7 +611,7 @@ int main()
 	snd_msg[0] = RX_WIDTH;
 	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 */
-	
+/*	
 	// Set up receive addresses.
 	char msg_addr[5];
 	msg_addr[0] = 0xE7;	
@@ -541,6 +638,7 @@ int main()
 
 	lseek(gpio_fd, 0, SEEK_SET);	// Handle any current interrupts.
 	read(gpio_fd, &ch, sizeof(ch));
+	ch = 0x01;
 
 	poll(&pfd, 1, POLL_TIMEOUT);
 
@@ -572,7 +670,7 @@ int main()
 	// Close the SPI device file for reading and 
 	// writing.
 	close(spi_dev_fd);
-
+*/
 	// Bring back default settings for GPIO. 
 	gpio_unexport(4);
 	gpio_unexport(27);
