@@ -23,20 +23,23 @@
 
 #include "nrf24l01.h"
 
-#define GPIO_CE 4 
-#define GPIO_IRQ 27
+#define GPIO_CE 200
+#define GPIO_IRQ 168
+
 #define GPIO_EDGE_FALL "falling"
 #define GPIO_EDGE_RISE "rising"
 #define GPIO_LVL_HIGH 0x01
 #define GPIO_LVL_LOW 0x00
 #define GPIO_DIR_INPUT 0x00
 #define GPIO_DIR_OUTPUT 0x01
+
+#define SPI_SPEED 4000000
 /*
  * Constants.
  * */
 
 #define SYSFS_GPIO_DIR "/sys/class/gpio"
-#define POLL_TIMEOUT (10 * 1000) // 2 seconds
+#define POLL_TIMEOUT (6 * 1000) // 6 seconds
 #define MAX_BUF 64
 
 using namespace std;
@@ -104,6 +107,8 @@ int gpio_set_dir(unsigned int gpio, unsigned int out_flag)
 	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR
 			"/gpio%d/direction", gpio);
 
+	while(access(buf, W_OK) < 0);
+
 	fd = open(buf, O_WRONLY);
 	if(fd < 0)
 	{
@@ -131,6 +136,8 @@ int gpio_get_value_fd(unsigned int gpio)
 	char path[32];
 
 	sprintf(path, SYSFS_GPIO_DIR "/gpio%i/value", gpio);
+	
+	while(access(path, R_OK) < 0);
 
 	fd = open(path, O_RDONLY);
 	if(fd < 0)
@@ -153,6 +160,8 @@ int gpio_set_value(unsigned int gpio, unsigned int value)
 
 	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR
 			"/gpio%d/value", gpio);
+
+	while(access(buf, W_OK) < 0);
 
 	fd = open(buf, O_WRONLY);
 	if(fd < 0)
@@ -179,6 +188,7 @@ int gpio_get_active_edge(unsigned int gpio, unsigned int * value)
 
 	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR
 			"/gpio%d/active_low", gpio);
+	while(access(buf, R_OK) < 0);
 
 	fd = open(buf, O_RDONLY | O_NONBLOCK);
 	if(fd < 0)
@@ -207,6 +217,7 @@ int gpio_set_active_edge(unsigned int gpio)
 
 	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR
 			"/gpio%d/active_low", gpio);
+	while(access(buf, W_OK) < 0);
 
 	fd = open(buf, O_WRONLY);
 	if(fd < 0)
@@ -234,6 +245,7 @@ int gpio_get_value(unsigned int gpio, unsigned int * value)
 
 	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR
 			"/gpio%d/value", gpio);
+	while(access(buf, R_OK) < 0);
 	
 	fd = open(buf, O_RDONLY);
 	if(fd < 0)
@@ -262,7 +274,9 @@ int gpio_set_value(unsigned int gpio, char * value)
 	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR
 			"/gpio%d/value", gpio);
 	
-	fd = open(buf, O_RDONLY);
+	while(access(buf, W_OK) < 0);
+
+	fd = open(buf, O_WRONLY);
 	if(fd < 0)
 	{
 		perror("gpio/get-value");
@@ -286,6 +300,9 @@ int gpio_set_edge(unsigned int gpio, char *edge)
 
 	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR
 			"/gpio%d/edge", gpio);
+
+	while(access(buf, W_OK) < 0);
+
 
 	fd = open(buf, O_WRONLY);
 	if(fd < 0)
@@ -328,6 +345,7 @@ int gpio_fd_close(int fd)
 {
 	return close(fd);
 }
+
 /*
 int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 {
@@ -351,8 +369,7 @@ int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 	xfer[1].len = len;
 	xfer[1].bits_per_word = 8;
 	xfer[1].speed_hz = 1000000;
-	xfer[1].cs_change = 0;
-	xfer[1].rx_nbits = len * 8;	// EXPERIMENT WITH THIS
+	xfer[1].cs_change = 1;
 
 	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(2), xfer);
 	printf("errno: %i \n", errno);
@@ -365,6 +382,7 @@ int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 	return 0;
 
 }
+
 int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 {
 	char data_buffer[len + 1];
@@ -395,7 +413,7 @@ int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 	xfer[1].len = 1;
 	xfer[1].bits_per_word = 8;
 	xfer[1].speed_hz = 1000000;
-	xfer[1].cs_change = 0;
+	xfer[1].cs_change = 1;
 
 	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(2), xfer);
 
@@ -405,7 +423,7 @@ int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 }
 */
 
-int test_send(int spi_dev_fd, char addr, char * data, int len)
+int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 {
 	char data_buffer[len + 1];
 	char recv_buffer;
@@ -415,20 +433,20 @@ int test_send(int spi_dev_fd, char addr, char * data, int len)
 	memset(&recv_buffer, 0, sizeof(recv_buffer));
 	
 	data_buffer[0] = addr;
-	printf("BUFF: %x\n", data_buffer[0]);
+	//printf("BUFF: %x\n", data_buffer[0]);
 	for(int i = 1; i < len + 1; ++i)
 	{
 		data_buffer[i] = data[i-1];
-		printf("BUFF: %x\n", data_buffer[i]);
+		//printf("BUFF: %x\n", data_buffer[i]);
 	}
 	xfer.tx_buf = (unsigned long) data_buffer;
 	xfer.rx_buf = (unsigned long) &recv_buffer;
 	xfer.len = len + 2;
 	xfer.bits_per_word = 8;
-	xfer.speed_hz = 1000000;
+	xfer.speed_hz = SPI_SPEED;
 	xfer.cs_change = 0;
 	xfer.rx_nbits = 8;	// EXPERIMENT WITH THIS
-	xfer.tx_nbits = 8 * len + 8;
+	xfer.tx_nbits = (8 * len) + 8;
 	
 	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(1), xfer);
 
@@ -436,7 +454,7 @@ int test_send(int spi_dev_fd, char addr, char * data, int len)
 
 }
 
-int test_read(int spi_dev_fd, char addr, char * copy_to, int len)
+int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 {
 	char data_buffer;
 	char recv_buffer[len];
@@ -450,7 +468,7 @@ int test_read(int spi_dev_fd, char addr, char * copy_to, int len)
 	xfer.rx_buf = (unsigned long) recv_buffer;
 	xfer.len = len + 1;
 	xfer.bits_per_word = 8;
-	xfer.speed_hz = 1000000;
+	xfer.speed_hz = SPI_SPEED;
 	xfer.cs_change = 0;
 	xfer.rx_nbits = len * 8;	// EXPERIMENT WITH THIS
 	xfer.tx_nbits = 8;
@@ -467,38 +485,55 @@ int test_read(int spi_dev_fd, char addr, char * copy_to, int len)
 
 int main() 
 {
+	struct pollfd pfd[2];
+
 	unsigned int val;
-	char rising[7] = GPIO_EDGE_RISE;
+	char rising[7] = "rising";
 
 	const char dev[32] = "/dev/spidev0.0";
 	uint8_t mode = SPI_MODE_0;
 	uint8_t bits = 8;
-	uint32_t speed = 1000000;
 	uint16_t delay;
+	int speed = SPI_SPEED;
 
 	// Setting (chip enable)
 	gpio_export(GPIO_CE);
-	gpio_set_dir(GPIO_CE, GPIO_DIR_OUTPUT);	// set gpio 4 as output.
-	//gpio_set_edge(GPIO_CE, rising);
+	//gpio_set_edge(GPIO_CE, rising); not needed since set to output.
+	//printf("errno: %i\n", errno);
+	
+	gpio_set_dir(GPIO_CE, GPIO_DIR_OUTPUT);	// set chip enable as output.
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
 
 	// Setting (IRQ)
 	gpio_export(GPIO_IRQ);
 	gpio_set_dir(GPIO_IRQ, GPIO_DIR_INPUT);
-	gpio_set_edge(GPIO_IRQ, rising);
 	gpio_set_active_edge(GPIO_IRQ);	// set to active low
+	gpio_set_edge(GPIO_IRQ, rising);
+
+	int gpio_irq_fd = gpio_get_value_fd((unsigned int) GPIO_IRQ);
+	pfd[1].fd = gpio_irq_fd;
+	pfd[1].events = POLLPRI;
+
+	pfd[0].fd = STDIN_FILENO;
+	pfd[0].events = POLLIN;
 
 	// File object for SPI device.
 	int spi_dev_fd = open(dev, O_RDWR);
 
 	printf("fd: %i\n", spi_dev_fd);
-	printf("errno: %i \n", errno);
+	printf("errno: %i\n", errno);
 
-	if(errno)
+	if(spi_dev_fd < 0)
 		return 0;
 
-	ioctl(spi_dev_fd, SPI_IOC_WR_MODE, &mode);	// Set mode.
+	int rtn = ioctl(spi_dev_fd, SPI_IOC_WR_MODE, &mode);	// Set mode.
+
+	if(rtn < 0)
+	{
+		printf("ioctl failed\n");
+		return 1;
+	}
 
 	int lsb_setting = 0;
 	ioctl(spi_dev_fd, SPI_IOC_WR_LSB_FIRST, &lsb_setting);	// MSB first.
@@ -507,173 +542,178 @@ int main()
 
 	ioctl(spi_dev_fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);	// Set MHz for transfer.
 
+	ioctl(spi_dev_fd, SPI_IOC_RD_LSB_FIRST, &lsb_setting);	// MSB first.
+
+	ioctl(spi_dev_fd, SPI_IOC_RD_BITS_PER_WORD, &bits);	// Number of bits per word.
+
+	ioctl(spi_dev_fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);	// Set MHz for transfer.
+
+	// Power down transceiver.
+	char addr;
+	char snd_msg[2];
+	snd_msg[0] = 0x00;
+	addr = W_REGISTER | CONFIG;
+	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+
 	// Wait 100ms for power on reset.
 	usleep(100000);
 
-	char addr;
-	int len = 1;
-	char snd_msg[len];
-	memset(snd_msg, 0, sizeof(snd_msg));
-
-	// Power up transceiver.
-	addr = W_REGISTER | CONFIG;
-	snd_msg[0] = PWR_UP;
-	//spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-	test_send(spi_dev_fd, addr, snd_msg, 1);
-
-	// Waiting 1.5ms.
-	usleep(2000);
-
-
-	len = 3;
+	// Set the TX_ADDR
+	int len = 5;
 	char msg[len];
-	memset(msg, 0, sizeof(msg));
 
-	//spi_read_msg(spi_dev_fd, FIFO_STATUS, msg, 2);
-	test_read(spi_dev_fd, FIFO_STATUS, msg, 2);
+	msg[0] = 0xE1;
+	spi_send_msg(spi_dev_fd, FLUSH_TX, msg, 1);
 
-	if(msg[0])
-		printf("msg0: %x \n", msg[0]);
-	if(msg[1])
-		printf("msg1: %x \n", msg[1]);
+	msg[0] = 0xe6;	
+	msg[1] = 0xe6;	
+	msg[2] = 0xe6;	
+	msg[3] = 0xe6;	
+	msg[4] = 0xe6;	
+	spi_send_msg(spi_dev_fd, W_REGISTER | TX_ADDR, msg, 5);
+	
+	//spi_send_msg(spi_dev_fd, W_REGISTER | RX_ADDR_P0, msg, 5);
 
+	//char addr;
+	//len = 1;
+	//char snd_msg[len];
+	//addr = W_REGISTER | CONFIG;
+	//snd_msg[0] = 0x00 | CRCO;
+	//spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
-	memset(msg, 0, sizeof(msg));
+	//addr = W_REGISTER | CONFIG;
+	//snd_msg[0] = 0x00 | PWR_UP; //| PRIM_RX;
+	//snd_msg[0] = 0x00 | 0x0e;
+	//spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
-	//spi_read_msg(spi_dev_fd, STATUS, msg, 1);
-	test_read(spi_dev_fd, STATUS, msg, 2);
+	snd_msg[0] = 0x3F;
+	spi_send_msg(spi_dev_fd, W_REGISTER | EN_AA, snd_msg, 1);
 
-	if(msg[0])
-		printf("msg0: %x \n", msg[0]);
-	if(msg[1])
-		printf("msg1: %x \n", msg[1]);
+	snd_msg[0] = 0x03;
+	spi_send_msg(spi_dev_fd, W_REGISTER | EN_RXADDR, snd_msg, 1);
 
+	snd_msg[0] = 0x03;
+	spi_send_msg(spi_dev_fd, W_REGISTER | SETUP_AW, snd_msg, 1);
 
-/*
-	char addr;
-	int len = 1;
-	char snd_msg[len];
-	memset(snd_msg, 0, sizeof(snd_msg));
+	snd_msg[0] = 0x00;
+	spi_send_msg(spi_dev_fd, W_REGISTER | SETUP_RETR, snd_msg, 1);
 
-	// Power up transceiver.
+	snd_msg[0] = 76;
+	spi_send_msg(spi_dev_fd, W_REGISTER | RF_CH, snd_msg, 1);
+
+	snd_msg[0] = 0x00;
+	spi_send_msg(spi_dev_fd, W_REGISTER | RF_SETUP, snd_msg, 1);
+
+	snd_msg[0] = 0xff;
+	spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, snd_msg, 1);
+
+	snd_msg[0] = 32;
+	spi_send_msg(spi_dev_fd, W_REGISTER | RX_PW_P0, snd_msg, 1);
+	spi_send_msg(spi_dev_fd, W_REGISTER | RX_PW_P1, snd_msg, 1);
+	spi_send_msg(spi_dev_fd, W_REGISTER | RX_PW_P2, snd_msg, 1);
+
+	snd_msg[0] = 0xe1;
+	spi_send_msg(spi_dev_fd, FLUSH_TX, snd_msg, 1);
+
+	//addr = W_REGISTER | STATUS;
+	//snd_msg[0] = 0x70;
+	//spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+
 	addr = W_REGISTER | CONFIG;
-	snd_msg[0] = PWR_UP;
+	snd_msg[0] = 0x00 | EN_CRC | CRCO;
 	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
-	// Waiting 1.5ms.
+	addr = W_REGISTER | CONFIG;
+	snd_msg[0] = 0x00 | EN_CRC | CRCO | PWR_UP;
+	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+
+
 	usleep(1500);
 
-	// Set PRIM_RX bit to enter RX mode.
-	//
-	//gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 1.
-	addr = W_REGISTER | CONFIG;
-	snd_msg[0] = PWR_UP | PRIM_RX;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+	memset(snd_msg, 0, sizeof(snd_msg));
+	addr = R_REGISTER | CONFIG;
+	spi_read_msg(spi_dev_fd, addr, snd_msg, 2);
 
-	// Enabling data pipes.
-	addr = W_REGISTER | EN_RXADDR;
-	snd_msg[0] = 0x00 | ERX_P0;
-//	snd_msg[0] = 0x00 | ERX_P5 | ERX_P4 | ERX_P3 | 
-//		ERX_P2 | ERX_P1 | ERX_P0;	
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	// Enabling data pipe auto acknowledge.
-	addr = W_REGISTER | EN_AA;	
-	snd_msg[0] = 0x00 | ENAA_P0;	
-
-//	snd_msg[0] = 0x00 | ENAA_P5 | ENAA_P4 | ENAA_P3 |
-//		ENAA_P2 | ENAA_P1 | ENAA_P0;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	// Set the payload widths.
-	addr = W_REGISTER | RX_PW_P0;
-	snd_msg[0] = RX_WIDTH;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-*/
-/*
-	addr = W_REGISTER | RX_PW_P1;
-	snd_msg[0] = RX_WIDTH;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	addr = W_REGISTER | RX_PW_P2;
-	snd_msg[0] = RX_WIDTH;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	addr = W_REGISTER | RX_PW_P3;
-	snd_msg[0] = RX_WIDTH;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	addr = W_REGISTER | RX_PW_P4;
-	snd_msg[0] = RX_WIDTH;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	addr = W_REGISTER | RX_PW_P5;
-	snd_msg[0] = RX_WIDTH;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-*/
-/*	
-	// Set up receive addresses.
-	char msg_addr[5];
-	msg_addr[0] = 0xE7;	
-	msg_addr[1] = 0xE7;	
-	msg_addr[2] = 0xE7;	
-	msg_addr[3] = 0xE7;	
-	msg_addr[4] = 0xE7;	
-
-	addr = W_REGISTER | RX_ADDR_P0;
-	spi_send_msg(spi_dev_fd, addr, msg_addr, 5);
-
-	// Set GPIO CE high to start active RX mode.
-	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 1.
-
-	// Wait 130us to enter the mode.
-//	usleep(130);
+	printf("should be 0xe:[0] %x \n", snd_msg[0]);
+	printf("should be 0x06:[1] %x \n", snd_msg[1]);
 
 	char ch;
-	struct pollfd pfd;
-	int gpio_fd = gpio_get_value_fd((unsigned int) GPIO_IRQ);
 
-	pfd.fd = gpio_fd;
-	pfd.events = POLLPRI;
+	lseek(pfd[1].fd, 0, SEEK_SET);
+	read(pfd[1].fd, &ch, sizeof(ch));
+	
+	usleep(10000);
+	// set the payload TX_PLD
 
-	lseek(gpio_fd, 0, SEEK_SET);	// Handle any current interrupts.
-	read(gpio_fd, &ch, sizeof(ch));
-	ch = 0x01;
+/*	int rc = poll(pfd, 2, POLL_TIMEOUT);
 
-	poll(&pfd, 1, POLL_TIMEOUT);
-
-	lseek(gpio_fd, 0, SEEK_SET);
-	read(gpio_fd, &ch, sizeof(ch));
-
-	printf("GPIO_IRQ: %x \n", ch);	
-
-	if(ch == 0x00)
+	if(pfd[1].revents & POLLPRI)
 	{
-		// Get payload 
-		char recv_msg[32];
-		spi_read_msg(spi_dev_fd, 0x00 | R_RX_PAYLOAD , recv_msg, 32);
-		if(recv_msg[0])
-		{
-			printf("recv_msg: %x \n", recv_msg[0]);
-		}
+		lseek(pfd[1].fd, 0, SEEK_SET);
+		read(pfd[1].fd, &ch, sizeof(ch));
+		printf("poll() GPIO interrupt: %x\n", ch);
+	}
+	if(pfd[0].revents & POLLIN)
+	{
+		lseek(pfd[0].fd, 0, SEEK_SET);
+		read(pfd[0].fd, &ch, sizeof(ch));
+		printf("poll() stdin read 0x%x\n", ch);
 
 	}
+*/
+
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);		
+	spi_send_msg(spi_dev_fd, W_TX_PAYLOAD, msg, 5);
 
 
+	// Set CE high for 15us.	
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);
+	//usleep(500);
 	
+	memset(snd_msg, 0, sizeof(snd_msg));
+	do
+	{
+		spi_read_msg(spi_dev_fd, R_REGISTER | NOP, snd_msg, 1);
+		snd_msg[0] = snd_msg[0] & (TX_DS | MAX_RT);
+	} while(snd_msg[0] == 0);
+
+	printf("snd_msg[0] = %x \n", snd_msg[0]);
+
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);		
+
+	//usleep(1000);
+	char status[2];
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, status, 2);
+
+	printf("status[0]: %x\n", status[0]);
+	printf("status[1]: %x\n", status[1]);
+
+	status[1] = status[1] & 0x20;
+	if(status[1] == 0x20)
+	{
+		printf("sent!\n");
+		//break;
+	}
+
+	//status [0] = 0xff;
+	//spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, status, 1);
+
 
 	// Power down transceiver.
 	snd_msg[0] = 0x00;
 	addr = W_REGISTER | CONFIG;
 	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
+	close(gpio_irq_fd);
 	// Close the SPI device file for reading and 
 	// writing.
 	close(spi_dev_fd);
-*/
+
 	// Bring back default settings for GPIO. 
-	gpio_unexport(4);
-	gpio_unexport(27);
+	gpio_unexport(GPIO_CE);
+	gpio_unexport(GPIO_IRQ);
 
 	return 0;
 }
+
