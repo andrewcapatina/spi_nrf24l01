@@ -475,8 +475,6 @@ int main()
 	gpio_export(GPIO_CE);
 	gpio_set_dir(GPIO_CE, GPIO_DIR_OUTPUT);	// set gpio 4 as output.
 
-	//gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
-
 	// Setting (IRQ)
 	gpio_export(GPIO_IRQ);
 	gpio_set_dir(GPIO_IRQ, GPIO_DIR_INPUT);
@@ -506,24 +504,23 @@ int main()
 
 	ioctl(spi_dev_fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);	// Set MHz for transfer.
 
-	read_all_registers(spi_dev_fd);
-
 	char addr;
 	char shutdown_msg[2];
 	char snd_msg[3];
+	
+	shutdown_msg[0] = 0x00;
+	addr = W_REGISTER | CONFIG;
+	spi_send_msg(spi_dev_fd, addr, shutdown_msg, 1);
+
+	usleep(10000);
+
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);	// Setting chip enable to 1.
 
-	addr = W_REGISTER | CONFIG;
-	snd_msg[0] = EN_CRC | CRCO;
-	int rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	addr = W_REGISTER | SETUP_RETR;
-	snd_msg[0] = 0x0f; 
-	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+	int rtn;
 
 	addr = W_REGISTER | EN_AA;
-	snd_msg[0] = 0x01;	// Turn off auto acknowledgement.
+	snd_msg[0] = 0x00;	// Turn off auto acknowledgement.
 	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
 	addr = W_REGISTER | SETUP_AW;
@@ -531,7 +528,7 @@ int main()
 	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 	
 	addr = W_REGISTER | RF_CH;
-	snd_msg[0] = 76;	// channel 76.
+	snd_msg[0] = 0x02;	// channel 76.
 	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
 	addr = W_REGISTER | EN_RXADDR;
@@ -547,18 +544,27 @@ int main()
 	snd_msg[0] = 32;	// 32 byte payload
 	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
+	addr = FLUSH_RX;
+	snd_msg[0] = FLUSH_RX;
+	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+	
 	addr = W_REGISTER | CONFIG;
-//	snd_msg[0] = PWR_UP | EN_CRC | CRCO | PRIM_RX;
 	snd_msg[0] = PWR_UP | PRIM_RX;
 	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
-	// Waiting 1.5ms.
-	//usleep(2000);
+	char msg_addr[5];
+	msg_addr[0] = 0xb6;	
+	msg_addr[1] = 0xb6;	
+	msg_addr[2] = 0xb6;	
+	msg_addr[3] = 0xb6;	
+	msg_addr[4] = 0xb6;	
+
+	addr = W_REGISTER | TX_ADDR;
+	spi_send_msg(spi_dev_fd, addr, msg_addr, 5);
+
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 1.
 
-
-	char msg_addr[5];
 	msg_addr[0] = 'R';	
 	msg_addr[1] = 'x';	
 	msg_addr[2] = 'A';	
@@ -574,6 +580,9 @@ int main()
 
 	printf("val: %i \n", val);
 
+	snd_msg[0] = 0xf0;
+	spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, snd_msg, 1);
+		
 	read_all_registers(spi_dev_fd);
 
 	bool recv = false;
@@ -582,24 +591,28 @@ int main()
 	{
 		memset(snd_msg, 0, sizeof(snd_msg));
 
-		spi_read_msg(spi_dev_fd, NOP, snd_msg, 1);
-
-		//printf("snd_msg[0]: %x \n", snd_msg[0]);
-
-		snd_msg[0] = (snd_msg[0] >> RX_P_NO) & 0x07;
+		spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, snd_msg, 2);
 		
-		if(snd_msg[0] >= 0 && snd_msg[0] <= 5)
+		if((snd_msg[0] & RX_DR) > 0)
 		{
-			printf("here\n");
-			char recv_msg[32];
-			memset(recv_msg, 0, sizeof(recv_msg));
-			spi_read_msg(spi_dev_fd, 0x00 | R_RX_PAYLOAD , recv_msg, 5);
-			if(recv_msg)
+
+			snd_msg[0] = (snd_msg[0] >> RX_P_NO) & 0x07;
+			
+			if(snd_msg[0] >= 0 && snd_msg[0] <= 5)
 			{
-				printf("recv_msg: %x \n", recv_msg[1]);
+				char recv_msg[32];
+				memset(recv_msg, 0, sizeof(recv_msg));
+				spi_read_msg(spi_dev_fd, 0x00 | R_RX_PAYLOAD , recv_msg, 32);
+				if(recv_msg)
+				{
+					printf("recv_msg: %s \n", recv_msg);
+				}
+
+				recv = true;
 			}
 
-			recv = true;
+			snd_msg[0] = 0xf0;
+			spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, snd_msg, 1);
 		}
 
 		spi_read_msg(spi_dev_fd, R_REGISTER | RPD, snd_msg, 2);
@@ -607,9 +620,23 @@ int main()
 		{
 			detected = true;
 			printf("carrier detected\n");
-
+	
+			read_all_registers(spi_dev_fd);
 		}
 
+		spi_read_msg(spi_dev_fd, R_REGISTER | FIFO_STATUS, snd_msg, 2);
+		if((snd_msg[1] & 0x02) == 0x02)
+		{
+				char recv_msg[32];
+				memset(recv_msg, 0, sizeof(recv_msg));
+				spi_read_msg(spi_dev_fd, 0x00 | R_RX_PAYLOAD , recv_msg, 5);
+				if(recv_msg)
+				{
+					printf("recv_msg: %x \n", recv_msg[1]);
+				}
+
+				recv = true;
+		}
 
 	}while(recv == false);
 
@@ -618,7 +645,6 @@ int main()
 	addr = W_REGISTER | CONFIG;
 	spi_send_msg(spi_dev_fd, addr, shutdown_msg, 1);
 
-	//close(gpio_fd);
 	// Close the SPI device file for reading and 
 	// writing.
 	close(spi_dev_fd);

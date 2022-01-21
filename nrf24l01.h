@@ -4,7 +4,6 @@
 #define REGISTER_MASK 0x1F
 #define R_RX_PAYLOAD  0x61
 #define W_TX_PAYLOAD  0xA0
-#define W_TX_PAYLOAD_NO_ACK 0xA8
 #define FLUSH_TX      0xE1
 #define FLUSH_RX      0xE2
 #define REUSE_TX_PL   0xE3
@@ -38,6 +37,7 @@
 #define RX_PW_P5    0x16
 #define FIFO_STATUS 0x17
 #define DYNPD       0x1C
+#define FEATURE     0x1D
 
 /* Bit Mnemonics */
 
@@ -79,11 +79,11 @@
 #define RF_PWR      1 /* 2 bits */   
 
 /* general status register */
-#define RX_DR       6
-#define TX_DS       5
-#define MAX_RT      4
+#define RX_DR       0x40
+#define TX_DS       0x20
+#define MAX_RT      0x10
 #define RX_P_NO     1 /* 3 bits */
-#define TX_FULL     0
+#define TX_FULL     0x01
 
 /* transmit observe register */
 #define PLOS_CNT    4 /* 4 bits */
