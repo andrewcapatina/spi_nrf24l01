@@ -10,7 +10,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <cstring> 
+#include <string>
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -22,6 +23,10 @@
 #include <linux/spi/spidev.h>
 
 #include "nrf24l01.h"
+
+#include <iostream>
+
+using namespace std;
 
 #define GPIO_CE 4 
 #define GPIO_IRQ 27
@@ -39,7 +44,7 @@
 #define POLL_TIMEOUT (10 * 1000) // 2 seconds
 #define MAX_BUF 64
 
-using namespace std;
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
 /**
  *	Function to bring a selected 
@@ -363,7 +368,7 @@ int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 
 }
 
-int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
+int spi_read_msg(int spi_dev_fd, char addr, char * status, char * copy_to, int len)
 {
 	char data_buffer;
 	char recv_buffer[len];
@@ -378,81 +383,89 @@ int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 	xfer.len = len + 1;
 	xfer.bits_per_word = 8;
 	xfer.speed_hz = 1000000;
-	//xfer.cs_change = 0;
+	xfer.cs_change = 0;
 	xfer.rx_nbits = len * 8;
 	xfer.tx_nbits = 8;
 	
 	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(1), xfer);
 	
-	if(recv_buffer[0])
+	if(res > 0)
 	{
-		strcpy(copy_to, recv_buffer);
+		status[0] = recv_buffer[0];
+		string temp = string(recv_buffer);
+		temp = temp.substr(1);
+		sprintf(copy_to, "%s", temp.c_str());
 	}
+	
+
+
 	return res;
 
 }
 
+
 void read_all_registers(int spi_dev_fd)
 {
 	char msg[10];
+	char status;
 
 	memset(msg, 0, sizeof(msg));
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | CONFIG, msg, 2);	
-	printf("CONFIG: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | CONFIG, &status, msg, 2);	
+	printf("CONFIG: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, msg, 2);	
-	printf("STATUS: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, &status, msg, 2);	
+	printf("STATUS: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | EN_AA, msg, 2);	
-	printf("EN_AA: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | EN_AA, &status, msg, 2);	
+	printf("EN_AA: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | EN_RXADDR, msg, 2);	
-	printf("RX_ADDR: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | EN_RXADDR, &status, msg, 2);	
+	printf("RX_ADDR: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_AW, msg, 2);	
-	printf("SETUP_AW: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_AW, &status, msg, 2);	
+	printf("SETUP_AW: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_RETR, msg, 2);	
-	printf("SETUP_RETR: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_RETR, &status, msg, 2);	
+	printf("SETUP_RETR: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | RF_CH, msg, 2);	
-	printf("RF_CH: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | RF_CH, &status, msg, 2);	
+	printf("RF_CH: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | RF_SETUP, msg, 2);	
-	printf("RF_SETUP: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | RF_SETUP, &status, msg, 2);	
+	printf("RF_SETUP: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, msg, 2);	
-	printf("STATUS: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, &status, msg, 2);	
+	printf("STATUS: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | OBSERVE_TX, msg, 2);	
-	printf("OBSERVE_TX: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | OBSERVE_TX, &status, msg, 2);	
+	printf("OBSERVE_TX: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | RPD, msg, 2);	
-	printf("RPD: 0x%x \n", msg[1]);
-
-	memset(msg, 0, sizeof(msg));
-
-	spi_read_msg(spi_dev_fd, R_REGISTER | RX_ADDR_P0, msg, 6);	
-	printf("RX_ADDR_P0: 0x%x %x %x %x %x \n", msg[5], msg[4], msg[3], msg[2], msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | RPD, &status, msg, 2);	
+	printf("RPD: 0x%x \n", msg[0]);
 
 	memset(msg, 0, sizeof(msg));
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | TX_ADDR, msg, 6);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | RX_ADDR_P0, &status, msg, 6);	
+	printf("RX_ADDR_P0: 0x%x %x %x %x %x \n", msg[4], msg[3], msg[2], msg[1], msg[0]);
 
-	printf("TX_ADDR: 0x%x %x %x %x %x \n", msg[5], msg[4], msg[3], msg[2], msg[1]);
+	memset(msg, 0, sizeof(msg));
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | RX_PW_P0, msg, 2);	
-	printf("RX_PW_P0: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | TX_ADDR, &status, msg, 6);	
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | FIFO_STATUS, msg, 2);	
-	printf("FIFO_STATUS: 0x%x \n", msg[1]);
+	printf("TX_ADDR: 0x%x %x %x %x %x \n", msg[4], msg[3], msg[2], msg[1], msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | DYNPD, msg, 2);	
-	printf("DYNPD: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | RX_PW_P0, &status, msg, 2);	
+	printf("RX_PW_P0: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | FEATURE, msg, 2);	
-	printf("FEATURE: 0x%x \n", msg[1]);
+	spi_read_msg(spi_dev_fd, R_REGISTER | FIFO_STATUS, &status, msg, 2);	
+	printf("FIFO_STATUS: 0x%x \n", msg[0]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | DYNPD, &status, msg, 2);	
+	printf("DYNPD: 0x%x \n", msg[0]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | FEATURE, &status, msg, 2);	
+	printf("FEATURE: 0x%x \n", msg[0]);
 
 
 
@@ -520,7 +533,7 @@ int main()
 	int rtn;
 
 	addr = W_REGISTER | EN_AA;
-	snd_msg[0] = 0x00;	// Turn off auto acknowledgement.
+	snd_msg[0] = 0x01;	// Turn off auto acknowledgement.
 	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
 	addr = W_REGISTER | SETUP_AW;
@@ -543,13 +556,22 @@ int main()
 	addr = W_REGISTER | RX_PW_P0;
 	snd_msg[0] = 32;	// 32 byte payload
 	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+	
+	addr = W_REGISTER | DYNPD;
+	snd_msg[0] = 0x01;	 
+	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+
+	addr = W_REGISTER | FEATURE;
+	snd_msg[0] = 0x06;	 
+	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
+
 
 	addr = FLUSH_RX;
 	snd_msg[0] = FLUSH_RX;
 	rtn = spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 	
 	addr = W_REGISTER | CONFIG;
-	snd_msg[0] = PWR_UP | PRIM_RX;
+	snd_msg[0] = EN_CRC | PWR_UP | PRIM_RX;
 	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
 	char msg_addr[5];
@@ -560,7 +582,7 @@ int main()
 	msg_addr[4] = 0xb6;	
 
 	addr = W_REGISTER | TX_ADDR;
-	spi_send_msg(spi_dev_fd, addr, msg_addr, 5);
+	//spi_send_msg(spi_dev_fd, addr, msg_addr, 5);
 
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 1.
@@ -587,36 +609,42 @@ int main()
 
 	bool recv = false;
 	bool detected = false;
+	char status;
 	do
 	{
 		memset(snd_msg, 0, sizeof(snd_msg));
 
-		spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, snd_msg, 2);
+		spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, &status, snd_msg, 2);
 		
-		if((snd_msg[0] & RX_DR) > 0)
+		if((status & RX_DR) > 0)
 		{
 
-			snd_msg[0] = (snd_msg[0] >> RX_P_NO) & 0x07;
+			status = (status >> RX_P_NO) & 0x07;
 			
-			if(snd_msg[0] >= 0 && snd_msg[0] <= 5)
+			if(status >= 0 && status <= 5)
 			{
-				char recv_msg[32];
+				char recv_msg[64];
+				char size[2];
 				memset(recv_msg, 0, sizeof(recv_msg));
-				spi_read_msg(spi_dev_fd, 0x00 | R_RX_PAYLOAD , recv_msg, 32);
+
+				spi_read_msg(spi_dev_fd, R_RX_PL_WID, &status, size, 2);
+
+				spi_read_msg(spi_dev_fd, R_RX_PAYLOAD , &status, recv_msg, (int) size[1]);
 				if(recv_msg)
 				{
 					printf("recv_msg: %s \n", recv_msg);
 				}
 
 				recv = true;
+				gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);	// Setting chip enable to 0.
 			}
 
 			snd_msg[0] = 0xf0;
 			spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, snd_msg, 1);
 		}
 
-		spi_read_msg(spi_dev_fd, R_REGISTER | RPD, snd_msg, 2);
-		if(snd_msg[1] > 0x00 && detected == false)
+		spi_read_msg(spi_dev_fd, R_REGISTER | RPD, &status, snd_msg, 2);
+		if(snd_msg[0] > 0x00 && detected == false)
 		{
 			detected = true;
 			printf("carrier detected\n");
@@ -624,12 +652,12 @@ int main()
 			read_all_registers(spi_dev_fd);
 		}
 
-		spi_read_msg(spi_dev_fd, R_REGISTER | FIFO_STATUS, snd_msg, 2);
-		if((snd_msg[1] & 0x02) == 0x02)
+		spi_read_msg(spi_dev_fd, R_REGISTER | FIFO_STATUS, &status, snd_msg, 2);
+		if((snd_msg[0] & 0x02) == 0x02)
 		{
 				char recv_msg[32];
 				memset(recv_msg, 0, sizeof(recv_msg));
-				spi_read_msg(spi_dev_fd, 0x00 | R_RX_PAYLOAD , recv_msg, 5);
+				spi_read_msg(spi_dev_fd, 0x00 | R_RX_PAYLOAD , &status, recv_msg, 5);
 				if(recv_msg)
 				{
 					printf("recv_msg: %x \n", recv_msg[1]);
