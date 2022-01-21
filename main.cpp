@@ -346,91 +346,12 @@ int gpio_fd_close(int fd)
 	return close(fd);
 }
 
-/*
-int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
-{
-	char data_buffer;
-	char recv_buffer[len];
-	struct spi_ioc_transfer xfer[2];	
-
-	memset(&xfer, 0, sizeof(xfer));
-	memset(&recv_buffer, 0, sizeof(recv_buffer));
-
-	data_buffer = addr;
-	xfer[0].tx_buf = (unsigned long) &data_buffer;
-	xfer[0].rx_buf = 0;
-	xfer[0].len = 1;
-	xfer[0].bits_per_word = 8;
-	xfer[0].speed_hz = 1000000;
-	xfer[0].cs_change = 1;
-	
-	xfer[1].rx_buf = (unsigned long) &recv_buffer;
-	xfer[1].tx_buf = 0;
-	xfer[1].len = len;
-	xfer[1].bits_per_word = 8;
-	xfer[1].speed_hz = 1000000;
-	xfer[1].cs_change = 1;
-
-	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(2), xfer);
-	printf("errno: %i \n", errno);
-
-	if(recv_buffer[0])
-	{
-		strcpy(copy_to, recv_buffer);
-	}
-
-	return 0;
-
-}
-
 int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 {
 	char data_buffer[len + 1];
-	char recv_buffer;
-	struct spi_ioc_transfer xfer[2];
-
-	memset(&xfer, 0, sizeof(xfer));
-	memset(&recv_buffer, 0, sizeof(recv_buffer));
-	
-	// Copy data to send
-	data_buffer[0] = addr;
-	printf("BUFF: %x\n", data_buffer[0]);
-	for(int i = 1; i < len + 1; ++i)
-	{
-		data_buffer[i] = data[i-1];
-		printf("BUFF: %x\n", data_buffer[i]);
-	}
-
-	xfer[0].tx_buf = (unsigned long) &data_buffer;
-	xfer[0].rx_buf = 0;
-	xfer[0].len = len + 1;
-	xfer[0].bits_per_word = 8;
-	xfer[0].speed_hz = 1000000;
-	xfer[0].cs_change = 1;
-	
-	xfer[1].rx_buf = (unsigned long) &recv_buffer;
-	xfer[1].tx_buf = 0;
-	xfer[1].len = 1;
-	xfer[1].bits_per_word = 8;
-	xfer[1].speed_hz = 1000000;
-	xfer[1].cs_change = 1;
-
-	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(2), xfer);
-
-
-
-	return 0;
-}
-*/
-
-int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
-{
-	char data_buffer[len + 1];
-	char recv_buffer;
 	struct spi_ioc_transfer xfer;	
 
 	memset(&xfer, 0, sizeof(xfer));
-	memset(&recv_buffer, 0, sizeof(recv_buffer));
 	
 	data_buffer[0] = addr;
 	//printf("BUFF: %x\n", data_buffer[0]);
@@ -440,12 +361,12 @@ int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 		//printf("BUFF: %x\n", data_buffer[i]);
 	}
 	xfer.tx_buf = (unsigned long) data_buffer;
-	xfer.rx_buf = (unsigned long) &recv_buffer;
-	xfer.len = len + 2;
+	xfer.rx_buf = (unsigned long) NULL;
+	xfer.len = len + 1;
 	xfer.bits_per_word = 8;
 	xfer.speed_hz = SPI_SPEED;
 	xfer.cs_change = 0;
-	xfer.rx_nbits = 8;	// EXPERIMENT WITH THIS
+	xfer.rx_nbits = 0;
 	xfer.tx_nbits = (8 * len) + 8;
 	
 	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(1), xfer);
@@ -470,7 +391,7 @@ int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 	xfer.bits_per_word = 8;
 	xfer.speed_hz = SPI_SPEED;
 	xfer.cs_change = 0;
-	xfer.rx_nbits = len * 8;	// EXPERIMENT WITH THIS
+	xfer.rx_nbits = len * 8;
 	xfer.tx_nbits = 8;
 	
 	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(1), xfer);
@@ -483,12 +404,77 @@ int spi_read_msg(int spi_dev_fd, char addr, char * copy_to, int len)
 
 }
 
+int read_all_registers(int spi_dev_fd)
+{
+	char msg[64];
+
+	memset(msg, 0, sizeof(msg));
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | CONFIG, msg, 2);	
+	printf("CONFIG: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, msg, 2);	
+	printf("STATUS: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | EN_AA, msg, 2);	
+	printf("EN_AA: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | EN_RXADDR, msg, 2);	
+	printf("RX_ADDR: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_AW, msg, 2);	
+	printf("SETUP_AW: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_RETR, msg, 2);	
+	printf("SETUP_RETR: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | RF_CH, msg, 2);	
+	printf("RF_CH: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | RF_SETUP, msg, 2);	
+	printf("RF_SETUP: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, msg, 2);	
+	printf("STATUS: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | OBSERVE_TX, msg, 2);	
+	printf("OBSERVE_TX: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | RPD, msg, 2);	
+	printf("RPD: 0x%x \n", msg[1]);
+
+	memset(msg, 0, sizeof(msg));
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | RX_ADDR_P0, msg, 6);	
+	printf("RX_ADDR_P0: 0x%x %x %x %x %x \n", msg[5], msg[4], msg[3], msg[2], msg[1]);
+
+	memset(msg, 0, sizeof(msg));
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | TX_ADDR, msg, 6);	
+
+	printf("TX_ADDR: 0x%x %x %x %x %x \n", msg[5], msg[4], msg[3], msg[2], msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | RX_PW_P0, msg, 2);	
+	printf("RX_PW_P0: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | FIFO_STATUS, msg, 2);	
+	printf("FIFO_STATUS: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | DYNPD, msg, 2);	
+	printf("DYNPD: 0x%x \n", msg[1]);
+
+	spi_read_msg(spi_dev_fd, R_REGISTER | FEATURE, msg, 2);	
+	printf("FEATURE: 0x%x \n", msg[1]);
+
+	return 0;
+}
+
 int main() 
 {
 	struct pollfd pfd[2];
 
 	unsigned int val;
-	char rising[7] = "rising";
+	char rising[10] = "rising";
 
 	const char dev[32] = "/dev/spidev0.0";
 	uint8_t mode = SPI_MODE_0;
@@ -512,11 +498,11 @@ int main()
 	gpio_set_edge(GPIO_IRQ, rising);
 
 	int gpio_irq_fd = gpio_get_value_fd((unsigned int) GPIO_IRQ);
-	pfd[1].fd = gpio_irq_fd;
-	pfd[1].events = POLLPRI;
+	//pfd[1].fd = gpio_irq_fd;
+	//pfd[1].events = POLLPRI;
 
-	pfd[0].fd = STDIN_FILENO;
-	pfd[0].events = POLLIN;
+	//pfd[0].fd = STDIN_FILENO;
+	//pfd[0].events = POLLIN;
 
 	// File object for SPI device.
 	int spi_dev_fd = open(dev, O_RDWR);
@@ -548,101 +534,62 @@ int main()
 
 	ioctl(spi_dev_fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);	// Set MHz for transfer.
 
-	// Power down transceiver.
-	char addr;
-	char snd_msg[2];
-	snd_msg[0] = 0x00;
-	addr = W_REGISTER | CONFIG;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	// Wait 100ms for power on reset.
-	usleep(100000);
-
 	// Set the TX_ADDR
-	int len = 5;
-	char msg[len];
+	char msg[10];
+	char addr;
+	char snd_msg[10];
 
-	msg[0] = 0xE1;
-	spi_send_msg(spi_dev_fd, FLUSH_TX, msg, 1);
-
-	msg[0] = 0xe6;	
-	msg[1] = 0xe6;	
-	msg[2] = 0xe6;	
-	msg[3] = 0xe6;	
-	msg[4] = 0xe6;	
+	msg[0] = 'R';	
+	msg[1] = 'x';	
+	msg[2] = 'A';	
+	msg[3] = 'A';	
+	msg[4] = 'A';	
 	spi_send_msg(spi_dev_fd, W_REGISTER | TX_ADDR, msg, 5);
 	
-	//spi_send_msg(spi_dev_fd, W_REGISTER | RX_ADDR_P0, msg, 5);
+	msg[0] = 0xb6;	
+	msg[1] = 0xb6;	
+	msg[2] = 0xb6;	
+	msg[3] = 0xb6;	
+	msg[4] = 0xb6;	
+	
+	spi_send_msg(spi_dev_fd, W_REGISTER | RX_ADDR_P0, msg, 5);
 
-	//char addr;
-	//len = 1;
-	//char snd_msg[len];
-	//addr = W_REGISTER | CONFIG;
-	//snd_msg[0] = 0x00 | CRCO;
-	//spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	//addr = W_REGISTER | CONFIG;
-	//snd_msg[0] = 0x00 | PWR_UP; //| PRIM_RX;
-	//snd_msg[0] = 0x00 | 0x0e;
-	//spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	snd_msg[0] = 0x3F;
+	snd_msg[0] = 0x00;
 	spi_send_msg(spi_dev_fd, W_REGISTER | EN_AA, snd_msg, 1);
-
-	snd_msg[0] = 0x03;
-	spi_send_msg(spi_dev_fd, W_REGISTER | EN_RXADDR, snd_msg, 1);
 
 	snd_msg[0] = 0x03;
 	spi_send_msg(spi_dev_fd, W_REGISTER | SETUP_AW, snd_msg, 1);
 
-	snd_msg[0] = 0x00;
-	spi_send_msg(spi_dev_fd, W_REGISTER | SETUP_RETR, snd_msg, 1);
-
-	snd_msg[0] = 76;
+	snd_msg[0] = 0x02;
 	spi_send_msg(spi_dev_fd, W_REGISTER | RF_CH, snd_msg, 1);
 
-	snd_msg[0] = 0x00;
-	spi_send_msg(spi_dev_fd, W_REGISTER | RF_SETUP, snd_msg, 1);
+	snd_msg[0] = 0x01;
+	spi_send_msg(spi_dev_fd, W_REGISTER | EN_RXADDR, snd_msg, 1);
 
-	snd_msg[0] = 0xff;
-	spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, snd_msg, 1);
+	snd_msg[0] = 0x0f;
+	spi_send_msg(spi_dev_fd, W_REGISTER | SETUP_RETR, snd_msg, 1);
+
+	snd_msg[0] = 0x01;
+	spi_send_msg(spi_dev_fd, W_REGISTER | RF_SETUP, snd_msg, 1);
 
 	snd_msg[0] = 32;
 	spi_send_msg(spi_dev_fd, W_REGISTER | RX_PW_P0, snd_msg, 1);
-	spi_send_msg(spi_dev_fd, W_REGISTER | RX_PW_P1, snd_msg, 1);
-	spi_send_msg(spi_dev_fd, W_REGISTER | RX_PW_P2, snd_msg, 1);
 
-	snd_msg[0] = 0xe1;
+	snd_msg[0] = FLUSH_TX;
 	spi_send_msg(spi_dev_fd, FLUSH_TX, snd_msg, 1);
 
-	//addr = W_REGISTER | STATUS;
-	//snd_msg[0] = 0x70;
-	//spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
 	addr = W_REGISTER | CONFIG;
-	snd_msg[0] = 0x00 | EN_CRC | CRCO;
-	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
-
-	addr = W_REGISTER | CONFIG;
-	snd_msg[0] = 0x00 | EN_CRC | CRCO | PWR_UP;
+	snd_msg[0] = PWR_UP;
 	spi_send_msg(spi_dev_fd, addr, snd_msg, 1);
 
 
-	usleep(1500);
 
-	memset(snd_msg, 0, sizeof(snd_msg));
-	addr = R_REGISTER | CONFIG;
-	spi_read_msg(spi_dev_fd, addr, snd_msg, 2);
+	//char ch;
 
-	printf("should be 0xe:[0] %x \n", snd_msg[0]);
-	printf("should be 0x06:[1] %x \n", snd_msg[1]);
-
-	char ch;
-
-	lseek(pfd[1].fd, 0, SEEK_SET);
-	read(pfd[1].fd, &ch, sizeof(ch));
+	//lseek(pfd[1].fd, 0, SEEK_SET);
+	//read(pfd[1].fd, &ch, sizeof(ch));
 	
-	usleep(10000);
 	// set the payload TX_PLD
 
 /*	int rc = poll(pfd, 2, POLL_TIMEOUT);
@@ -663,21 +610,24 @@ int main()
 */
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);		
-	spi_send_msg(spi_dev_fd, W_TX_PAYLOAD, msg, 5);
+	char word[32];
+	memset(word, 0, sizeof(word));
+	word[0] = 'h';
+	word[1] = 'e';
+	word[2] = 'l';
+	word[3] = 'l';
+	word[4] = 'o';
 
+	spi_send_msg(spi_dev_fd, W_TX_PAYLOAD_NO_ACK, word, 32);
 
-	// Set CE high for 15us.	
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);
-	//usleep(500);
 	
 	memset(snd_msg, 0, sizeof(snd_msg));
 	do
 	{
-		spi_read_msg(spi_dev_fd, R_REGISTER | NOP, snd_msg, 1);
+		spi_read_msg(spi_dev_fd, NOP, snd_msg, 1);
 		snd_msg[0] = snd_msg[0] & (TX_DS | MAX_RT);
-	} while(snd_msg[0] == 0);
-
-	printf("snd_msg[0] = %x \n", snd_msg[0]);
+	} while(snd_msg[0] != TX_DS && snd_msg[0] != MAX_RT);
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);		
 
@@ -693,12 +643,17 @@ int main()
 	if(status[1] == 0x20)
 	{
 		printf("sent!\n");
-		//break;
 	}
+	else 
+	{
+		snd_msg[0] = 0x10;
+		spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, snd_msg, 1);
+	}	
 
-	//status [0] = 0xff;
-	//spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, status, 1);
 
+	read_all_registers(spi_dev_fd);
+
+//	usleep(100000);
 
 	// Power down transceiver.
 	snd_msg[0] = 0x00;
