@@ -46,6 +46,8 @@ using namespace std;
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
+#define NUM_PAYLOAD_BYTES 30
+
 /**
  *	Function to bring a selected 
  *	GPIO into userspace.
@@ -541,6 +543,12 @@ void nrf_write_command_multi_byte(int spi_dev_fd, char cmd, char * value, int le
 	return;
 }
 
+/**
+ *	Initializes nrf registers 
+ *	for transmit mode.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
 void nrf_tx_init(int spi_dev_fd)
 {
 	char reg, value;
@@ -580,7 +588,7 @@ void nrf_tx_init(int spi_dev_fd)
 	reg = RF_SETUP;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
-	value = 32;
+	value = NUM_PAYLOAD_BYTES;
 	reg = RX_PW_P0;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
@@ -611,64 +619,6 @@ void nrf_tx_init(int spi_dev_fd)
 	return;
 }
 
-void nrf_rx_init(int spi_dev_fd)
-{
-	char reg, value;
-
-	reg = EN_AA;
-	value = 0x3f;	// Turn off auto acknowledgement.
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	reg = SETUP_AW;
-	value = 0x03;	// 5 byte address width.
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-	
-	reg = RF_CH;
-	value = 0x02;	// channel 2.
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	reg = EN_RXADDR;
-	value = 0x3f;	// Enable data pipe 0.
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	reg = RF_SETUP;
-	//snd_msg[0] = 0x24;
-	value = 0x01;	// 1Mbps, -12dBm power output. 
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	reg = RX_PW_P0;
-	value = 32;	// 32 byte payload
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-	
-	reg = DYNPD;
-	value = 0x3f;	 
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	reg = FEATURE;
-	value = 0x06;	 
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	reg = FLUSH_RX;
-	value = FLUSH_RX;
-	nrf_write_command_byte(spi_dev_fd, reg, value);
-
-	reg = FLUSH_TX;
-	value = FLUSH_TX;
-	nrf_write_command_byte(spi_dev_fd, reg, value);
-
-	reg = STATUS;
-	value = RX_DR | TX_DS | MAX_RT;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-	
-	
-	reg = CONFIG;
-	value = EN_CRC | CRCO | PWR_UP | PRIM_RX;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-
-	return;
-}
-
 int nrf_set_rx_address(int spi_dev_fd, char * addr, int pipe)
 {
 	char reg;
@@ -682,6 +632,12 @@ int nrf_set_rx_address(int spi_dev_fd, char * addr, int pipe)
 	return 0;
 }
 
+/**
+ *	Set the transmit address of the nrf.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * 	addr: tx address
+ * */
 int nrf_set_tx_address(int spi_dev_fd, char * addr)
 {
 	char reg;
@@ -692,7 +648,7 @@ int nrf_set_tx_address(int spi_dev_fd, char * addr)
 	return 0;
 }
 
-bool nrf_pipe_available(int spi_dev_fd, int * pipe)
+bool nrf_rx_pipe_available(int spi_dev_fd, int * pipe)
 {
 	
 	char addr = NOP;
@@ -726,27 +682,28 @@ void nrf_shutdown(int spi_dev_fd)
 	return;
 }
 
+/**	
+ *	Adds new payload to the transceiver.
+ *
+ *	spi_dev_fd: file descriptor for spi device.
+ * */
 int nrf_tx_new_payload(int spi_dev_fd, char * payload, int len)
 {
 
-	// Put low so we can add the payload.
-	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
-
 	char reg = W_TX_PAYLOAD;
 	nrf_write_command_multi_byte(spi_dev_fd, reg, payload, len);
-
-	// Start tx transmission.
-	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);
 
 	return 0;
 }
 
 /**
- *
+ *	Checks if packet has been sent.
  *
  * 	if 0 is returned: send pending.
  *	If 1 is returned: TX_DS set.
  *	If 2 is returned: MAX_RT set.
+ *
+ *	spi_dev_fd: file descriptor for spi device.
  * */
 int nrf_tx_pending_send(int spi_dev_fd)
 {
@@ -767,12 +724,23 @@ int nrf_tx_pending_send(int spi_dev_fd)
 	return 0;
 }
 
+/**
+ *	Function to load a payload and send a packet.
+ *
+ *
+ *	spi_dev_fd: file descriptor for spi device.
+ * */
 int nrf_tx_send_packet(int spi_dev_fd, char * payload, int len)
 {
 	int rtn; 
-
+	// Put low so we can add the payload.
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
 	// Set a new payload.
 	nrf_tx_new_payload(spi_dev_fd, payload, len);
+
+	// Start tx transmission.
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);
+
 
 	do
 	{
@@ -787,7 +755,45 @@ int nrf_tx_send_packet(int spi_dev_fd, char * payload, int len)
 
 	// Go back to standby mode
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);	// Setting chip enable to 0.
+
+	char reg = W_REGISTER | STATUS;
+	char val = RX_DR | TX_DS | MAX_RT;
+	spi_send_msg(spi_dev_fd, reg, &val, 1);
+
 	return 0;
+}
+
+void send_files(int spi_dev_fd, FILE * fp)
+{
+	int num_bytes, read_size, rtn, size;
+	char payload[NUM_PAYLOAD_BYTES + 1] = {0};
+
+	fseek(fp, 0, SEEK_END);
+	size = ftell(fp);
+	printf("file size: %i \n", size);
+
+	strcpy(payload, "SENDING_IMAGE");
+
+	nrf_tx_send_packet(spi_dev_fd, payload, NUM_PAYLOAD_BYTES);
+
+	memset(payload, 0, sizeof(payload));
+
+	sprintf(payload, "%i", size);
+
+	nrf_tx_send_packet(spi_dev_fd, payload, NUM_PAYLOAD_BYTES);
+
+	rewind(fp);
+	memset(payload, 0, sizeof(payload));
+	while(!feof(fp))
+	{
+		read_size = fread(payload, 1, NUM_PAYLOAD_BYTES, fp);
+
+		rtn = nrf_tx_send_packet(spi_dev_fd, payload, read_size);
+
+		memset(payload, 0, sizeof(payload));
+
+		num_bytes += read_size;
+	}
 }
 
 int main() 
@@ -845,41 +851,15 @@ int main()
 	nrf_tx_init(spi_dev_fd); 
 	nrf_print_all_registers(spi_dev_fd);
 
-	char word[32];
-	strcpy(word, "Hello World!");
-
-
-	nrf_tx_send_packet(spi_dev_fd, word, 30);
-	// TEST RECEIVE
 	/*
-	word[0] = MAX_RT;
-	spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, word, 1);
+	char word[31];
+	strcpy(word, "fox jumped over the blue fence");
+	nrf_tx_send_packet(spi_dev_fd, word, NUM_PAYLOAD_BYTES);
+	*/
 
-	word[0] = 0x0f;
-	spi_send_msg(spi_dev_fd, W_REGISTER | CONFIG, word, 1);
-
-	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 0.
-	bool received = false;
-	int pipe;
-	do
-	{
-		if(nrf_pipe_available(spi_dev_fd, &pipe) == 0)
-		{
-			received = true;
-			
-			char recv_msg[64];
-			char size;
-			char status;
-			spi_read_msg(spi_dev_fd, R_RX_PL_WID, &status, &size, 1);
-
-			spi_read_msg(spi_dev_fd, R_RX_PAYLOAD, &status, recv_msg, (int) size);
-			
-			printf("recv_msg: %s \n", recv_msg);
-		}
-
-	}while(received == false);
-*/
-	// END TEST RECEIVE
+	FILE * fp = fopen("img.jpg", "r");
+	send_files(spi_dev_fd, fp);
+	fclose(fp);
 
 	nrf_print_all_registers(spi_dev_fd);
 

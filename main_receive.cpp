@@ -46,6 +46,8 @@ using namespace std;
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
+#define NUM_PAYLOAD_BYTES 31
+
 /**
  *	Function to bring a selected 
  *	GPIO into userspace.
@@ -534,69 +536,10 @@ void nrf_write_command_multi_byte(int spi_dev_fd, char cmd, char * value, int le
 	return;
 }
 
-void nrf_tx_init(int spi_dev_fd)
-{
-	char reg, value;
-
-	value = 0x03;
-	reg = EN_AA;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-	
-	value = 0x03;
-	reg = SETUP_AW;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	value = 0x02;
-	reg = RF_CH;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	value = 0x03;
-	reg = EN_RXADDR;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	value = 0xff;
-	reg = SETUP_RETR;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	value = 0x01;
-	reg = RF_SETUP;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	value = 32;
-	reg = RX_PW_P0;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	value = 32;
-	reg = RX_PW_P1;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	value = 0x3f;
-	reg = DYNPD;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	value = 0x06;
-	reg = FEATURE;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	reg = FLUSH_RX;
-	value = FLUSH_RX;
-	nrf_write_command_byte(spi_dev_fd, reg, value);
-
-	reg = FLUSH_TX;
-	value = FLUSH_TX;
-	nrf_write_command_byte(spi_dev_fd, reg, value);
-
-	reg = STATUS;
-	value = RX_DR | TX_DS | MAX_RT;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-
-	reg = CONFIG;
-	value = EN_CRC | PWR_UP;
-	nrf_write_reg_byte(spi_dev_fd, reg, value);
-	
-	return;
-}
-
+/**
+ *	Initializes memory mapped registers for receive mode.
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
 void nrf_rx_init(int spi_dev_fd)
 {
 	char reg, value;
@@ -628,7 +571,7 @@ void nrf_rx_init(int spi_dev_fd)
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = RX_PW_P0;
-	value = 32;	// 32 byte payload
+	value = NUM_PAYLOAD_BYTES;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 	
 	reg = DYNPD;
@@ -659,6 +602,11 @@ void nrf_rx_init(int spi_dev_fd)
 	return;
 }
 
+/**
+ *	Sets the rx address of the transceiver.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
 int nrf_set_rx_address(int spi_dev_fd, char * addr, int pipe)
 {
 	char reg;
@@ -672,6 +620,11 @@ int nrf_set_rx_address(int spi_dev_fd, char * addr, int pipe)
 	return 0;
 }
 
+/**
+ *	Sets the tx address of the transceiver.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
 int nrf_set_tx_address(int spi_dev_fd, char * addr)
 {
 	char reg;
@@ -682,7 +635,12 @@ int nrf_set_tx_address(int spi_dev_fd, char * addr)
 	return 0;
 }
 
-bool nrf_pipe_available(int spi_dev_fd, int * pipe)
+/**
+ *	Checks if a data pipe is available for reading.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
+bool nrf_rx_pipe_available(int spi_dev_fd, int * pipe)
 {
 	
 	char addr = NOP;
@@ -704,6 +662,10 @@ bool nrf_pipe_available(int spi_dev_fd, int * pipe)
 	return 1;
 }
 
+/**
+ *	Shutdown the transceiver.
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
 void nrf_shutdown(int spi_dev_fd)
 {
 	char addr;
@@ -735,6 +697,7 @@ int nrf_tx_new_payload(int spi_dev_fd, char * payload, int len)
  * 	if 0 is returned: send pending.
  *	If 1 is returned: TX_DS set.
  *	If 2 is returned: MAX_RT set.
+ * 	spi_dev_fd: file descriptor for spi device.
  * */
 int nrf_tx_pending_send(int spi_dev_fd)
 {
@@ -753,6 +716,32 @@ int nrf_tx_pending_send(int spi_dev_fd)
 	
 
 	return 0;
+}
+
+/**
+ *	Reads the payload when data pipe
+ *	is available.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
+int nrf_rx_read(int spi_dev_fd, char * payload, int * pipe)
+{
+	int pipe_temp;
+	if(nrf_rx_pipe_available(spi_dev_fd, &pipe_temp) == 0)
+	{
+		printf("pipe: %i \n", pipe_temp);
+		char status;
+
+		spi_read_msg(spi_dev_fd, R_RX_PAYLOAD , &status, payload, (int) NUM_PAYLOAD_BYTES);
+
+		*pipe = pipe_temp;
+
+		printf("payload: %s \n", payload);
+
+		return 0;
+	}
+
+	return 1;
 }
 
 int main() 
@@ -826,37 +815,16 @@ int main()
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 1.
 	
-
-	bool recv = false;
-	char status;
+	char payload[64];
+	int pipe; 
 	do
 	{
-		int pipe;
-		if(nrf_pipe_available(spi_dev_fd, &pipe) == 0)
-		{
-			//msg_addr[0] = 0x01;
-			//spi_send_msg(spi_dev_fd, W_ACK_PAYLOAD | pipe, msg_addr, 1);
-
-
-			printf("pipe: %i \n", pipe);
-			char recv_msg[64];
-			char size;
-			memset(recv_msg, 0, sizeof(recv_msg));
-
-			spi_read_msg(spi_dev_fd, R_RX_PL_WID, &status, &size, 1);
-
-			printf("size: %i \n", size);
-
-			spi_read_msg(spi_dev_fd, R_RX_PAYLOAD , &status, recv_msg, (int) size);
-			
-			printf("recv_msg: %s \n", recv_msg);
-			nrf_print_all_registers(spi_dev_fd);
-
-			recv = true;
-
-		}
-
-	}while(recv == false);
+		rtn = nrf_rx_read(spi_dev_fd, payload, &pipe);
+	//}while(rtn == 1);
+	}while(1);
+	
+	printf("payload: %s \n", payload);
+	nrf_print_all_registers(spi_dev_fd);
 
 	usleep(15000000);
 
