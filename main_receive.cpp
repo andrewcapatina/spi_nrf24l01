@@ -455,9 +455,6 @@ void nrf_print_all_registers(int spi_dev_fd)
 	spi_read_msg(spi_dev_fd, R_REGISTER | RF_SETUP, &status, msg, 1);	
 	printf("RF_SETUP: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, &status, msg, 1);	
-	printf("STATUS: 0x%x \n", msg[0]);
-
 	spi_read_msg(spi_dev_fd, R_REGISTER | OBSERVE_TX, &status, msg, 1);	
 	printf("OBSERVE_TX: 0x%x \n", msg[0]);
 
@@ -620,10 +617,14 @@ void nrf_rx_init(int spi_dev_fd)
 	value = 0x03;	// Enable data pipe 0.
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
+	reg = SETUP_RETR;
+	value = 0xff;
+	nrf_write_reg_byte(spi_dev_fd, reg, value);
+
 	reg = RF_SETUP;
 	//snd_msg[0] = 0x24;
 	value = 0x01;	// 1Mbps, -12dBm power output. 
-	value = 0x20;	// 1Mbps, -12dBm power output. 
+	value = 0x22;	// 1Mbps, -12dBm power output. 
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = RX_PW_P0;
@@ -631,11 +632,11 @@ void nrf_rx_init(int spi_dev_fd)
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 	
 	reg = DYNPD;
-	value = 0x00;	 
+	value = 0x03;	 
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = FEATURE;
-	value = 0x00;	 
+	value = 0x04;	 
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = FLUSH_RX;
@@ -802,11 +803,11 @@ int main()
 
 	nrf_set_rx_address(spi_dev_fd, msg_addr, 0);
 
-	//msg_addr[0] = 0xe7;	
-	//msg_addr[1] = 0xe7;	
-	//msg_addr[2] = 0xe7;	
-	//msg_addr[3] = 0xe7;	
-	//msg_addr[4] = 0xe7;	
+	msg_addr[0] = 0xe7;	
+	msg_addr[1] = 0xe7;	
+	msg_addr[2] = 0xe7;	
+	msg_addr[3] = 0xe7;	
+	msg_addr[4] = 0xe7;	
 	nrf_set_tx_address(spi_dev_fd, msg_addr);
 
 	msg_addr[4] = 'B';
@@ -844,6 +845,8 @@ int main()
 
 			spi_read_msg(spi_dev_fd, R_RX_PL_WID, &status, &size, 1);
 
+			printf("size: %i \n", size);
+
 			spi_read_msg(spi_dev_fd, R_RX_PAYLOAD , &status, recv_msg, (int) size);
 			
 			printf("recv_msg: %s \n", recv_msg);
@@ -851,34 +854,11 @@ int main()
 
 			recv = true;
 
-			/*
-			// TEST SEND ACK		
-			// if works add code to change tx addresss based on pipe.
-			snd_msg[0] = RX_DR;
-			spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, snd_msg, 1);
-
-			gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
-			snd_msg[0] = 0x0e;
-			spi_send_msg(spi_dev_fd, W_REGISTER | CONFIG, snd_msg, 1);
-
-			nrf_print_all_registers(spi_dev_fd);
-
-			gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);
-
-			int rtn; 
-			do
-			{
-				rtn = nrf_tx_pending_send(spi_dev_fd);
-			}while(rtn == 0);
-
-			gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
-
-
-			// END TEST SEND ACK
-			*/
 		}
 
 	}while(recv == false);
+
+	usleep(15000000);
 
 	nrf_shutdown(spi_dev_fd);
 
