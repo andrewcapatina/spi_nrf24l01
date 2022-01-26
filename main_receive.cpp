@@ -724,24 +724,75 @@ int nrf_tx_pending_send(int spi_dev_fd)
  *
  * 	spi_dev_fd: file descriptor for spi device.
  * */
-int nrf_rx_read(int spi_dev_fd, char * payload, int * pipe)
+int nrf_rx_read(int spi_dev_fd, char * payload, int * pipe, int * bytes)
 {
-	int pipe_temp;
-	if(nrf_rx_pipe_available(spi_dev_fd, &pipe_temp) == 0)
+	int pipe_temp, rtn;
+
+	// TODO: Add timeout. 
+	do
 	{
-		printf("pipe: %i \n", pipe_temp);
+		rtn = nrf_rx_pipe_available(spi_dev_fd, &pipe_temp);
+
+	}while(rtn != 0);
+	
+	if(rtn == 0)
+	{
 		char status;
+		
+		if(bytes != NULL)
+		{
+			char size;
+			spi_read_msg(spi_dev_fd, R_RX_PL_WID, &status, &size, 1); 
+			*bytes = (int) size;
+		}
+
 
 		spi_read_msg(spi_dev_fd, R_RX_PAYLOAD , &status, payload, (int) NUM_PAYLOAD_BYTES);
 
 		*pipe = pipe_temp;
-
-		printf("payload: %s \n", payload);
+	
+		char msg;
+		msg = RX_DR;
+		spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, &msg, 1);
 
 		return 0;
 	}
 
 	return 1;
+}
+
+int receive_file(int spi_dev_fd, int file_type)
+{
+	int rtn;
+	char payload[64], status, msg;
+	int pipe;
+	int size=0, bytes=0, num_bytes=0;
+
+
+	//FILE * fp = fopen("img.jpg", "w");
+	// Get the size of the file.
+	rtn = nrf_rx_read(spi_dev_fd, payload, &pipe, NULL);
+
+	size = atoi(payload);
+
+	
+	while(num_bytes < size)
+	{
+		memset(payload, 0, sizeof(payload));
+		rtn = nrf_rx_read(spi_dev_fd, payload, &pipe, &bytes);
+
+		bytes = bytes - 2;	// Need to subtract 2 cause currently losing 2 bytes.
+
+		//fwrite(payload, bytes, 1, fp);
+		num_bytes += bytes;	
+		printf("num_bytes: %i \n", bytes);
+	}
+
+	//fclose(fp);
+
+	printf("num_bytes: %i \n", num_bytes);
+
+	return 0;
 }
 
 int main() 
@@ -799,11 +850,11 @@ int main()
 	msg_addr[4] = 0xe7;	
 	nrf_set_tx_address(spi_dev_fd, msg_addr);
 
-	msg_addr[4] = 'B';
-	nrf_set_rx_address(spi_dev_fd, msg_addr, 1);
+	//msg_addr[4] = 'B';
+	//nrf_set_rx_address(spi_dev_fd, msg_addr, 1);
 
-	msg_addr[0] = 'C';
-	spi_send_msg(spi_dev_fd, W_REGISTER | RX_ADDR_P2, msg_addr, 1);
+	//msg_addr[0] = 'C';
+	//spi_send_msg(spi_dev_fd, W_REGISTER | RX_ADDR_P2, msg_addr, 1);
 
 	int rtn;
 
@@ -815,18 +866,19 @@ int main()
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 1.
 	
+	
 	char payload[64];
 	int pipe; 
-	do
-	{
-		rtn = nrf_rx_read(spi_dev_fd, payload, &pipe);
-	//}while(rtn == 1);
-	}while(1);
-	
-	printf("payload: %s \n", payload);
-	nrf_print_all_registers(spi_dev_fd);
 
-	usleep(15000000);
+	rtn = nrf_rx_read(spi_dev_fd, payload, &pipe, NULL);
+
+	if(strcmp(payload, "SENDING_IMAGE") == 0)
+	{
+		receive_file(spi_dev_fd, 0);
+
+	}
+
+	nrf_print_all_registers(spi_dev_fd);
 
 	nrf_shutdown(spi_dev_fd);
 

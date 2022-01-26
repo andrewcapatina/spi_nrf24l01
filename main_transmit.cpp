@@ -765,7 +765,7 @@ int nrf_tx_send_packet(int spi_dev_fd, char * payload, int len)
 
 void send_files(int spi_dev_fd, FILE * fp)
 {
-	int num_bytes, read_size, rtn, size;
+	int num_bytes=0, read_size, rtn, size;
 	char payload[NUM_PAYLOAD_BYTES + 1] = {0};
 
 	fseek(fp, 0, SEEK_END);
@@ -790,9 +790,15 @@ void send_files(int spi_dev_fd, FILE * fp)
 
 		rtn = nrf_tx_send_packet(spi_dev_fd, payload, read_size);
 
+		if(rtn == 0)
+		{
+			printf("ACK RECEIVED \n");
+		}
 		memset(payload, 0, sizeof(payload));
 
 		num_bytes += read_size;
+
+		printf("num_bytes: %i \n", num_bytes);
 	}
 }
 
