@@ -373,12 +373,12 @@ int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 	{
 		data_buffer[i] = data[i-1];
 	}
-	xfer.tx_buf = (long long unsigned int) data_buffer;
+	xfer.tx_buf = (unsigned long) data_buffer;
 	xfer.rx_buf = (unsigned long) NULL;
 	xfer.len = len + 1;
 	xfer.bits_per_word = 8;
 	xfer.speed_hz = 1000000;
-	//xfer.cs_change = 0;
+	xfer.cs_change = 0;
 	//xfer.rx_nbits = 8;
 	xfer.rx_nbits = 0;
 	xfer.tx_nbits = (8 * len) + 8;
@@ -415,15 +415,9 @@ int spi_read_msg(int spi_dev_fd, char addr, char * status, char * copy_to, int l
 		status[0] = recv_buffer[0];
 		if(copy_to != NULL)
 		{
-			string temp = string(recv_buffer);
-			if(temp.size() > 0)
+			for(int i = 0; i < len; ++i)
 			{
-				temp = temp.substr(1);
-				strncpy(copy_to, temp.c_str(), len);
-			}
-			else
-			{
-				printf("didn't receive anything. \n");
+				copy_to[i] = recv_buffer[i+1];
 			}
 		}
 	}
@@ -691,6 +685,7 @@ int nrf_tx_new_payload(int spi_dev_fd, char * payload, int len)
 {
 
 	char reg = W_TX_PAYLOAD;
+
 	nrf_write_command_multi_byte(spi_dev_fd, reg, payload, len);
 
 	return 0;
@@ -707,18 +702,29 @@ int nrf_tx_new_payload(int spi_dev_fd, char * payload, int len)
  * */
 int nrf_tx_pending_send(int spi_dev_fd)
 {
-	char addr, code, status;
+	char addr, code, msg, status;
 
 	addr = R_REGISTER | STATUS;
 	spi_read_msg(spi_dev_fd, addr, &status, NULL, 0);
 
 	code = status & TX_DS;
 	if(code == TX_DS)
+	{
+	//	addr = W_REGISTER | STATUS;
+	//	msg = TX_DS | MAX_RT;
+	//	spi_send_msg(spi_dev_fd, addr, &msg, 1);
 		return 1;
+
+	}
 
 	code = status & MAX_RT;
 	if(code == MAX_RT)
+	{
+		//addr = W_REGISTER | STATUS;
+		//msg = MAX_RT;
+		//spi_send_msg(spi_dev_fd, addr, &msg, 1);
 		return 2;
+	}
 	
 
 	return 0;
@@ -737,6 +743,17 @@ int nrf_tx_send_packet(int spi_dev_fd, char * payload, int len)
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
 	// Set a new payload.
 	nrf_tx_new_payload(spi_dev_fd, payload, len);
+
+	/*
+	// TODO: debug code
+	char status;
+	spi_read_msg(spi_dev_fd, W_TX_PAYLOAD, &status, payload, NUM_PAYLOAD_BYTES); 
+	for(int i = 0; i < len; ++i)
+	{
+		printf("i: %x \n", payload[i]);
+	}
+	// end debug code.
+*/
 
 	// Start tx transmission.
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);
@@ -786,20 +803,28 @@ void send_files(int spi_dev_fd, FILE * fp)
 	memset(payload, 0, sizeof(payload));
 	while(!feof(fp))
 	{
-		read_size = fread(payload, 1, NUM_PAYLOAD_BYTES, fp);
+		memset(payload, 0, sizeof(payload));
+		read_size = fread(payload, sizeof(char), NUM_PAYLOAD_BYTES, fp);
 
 		rtn = nrf_tx_send_packet(spi_dev_fd, payload, read_size);
 
+		/*
 		if(rtn == 0)
 		{
 			printf("ACK RECEIVED \n");
 		}
-		memset(payload, 0, sizeof(payload));
+		*/
 
 		num_bytes += read_size;
 
-		printf("num_bytes: %i \n", num_bytes);
+		//printf("num_bytes: %i \n", num_bytes);
+		for(int i = 0; i < read_size; ++i)
+		{
+			printf("%x ", payload[i]);
+		}
+		printf("\n");
 	}
+
 }
 
 int main() 
@@ -857,12 +882,10 @@ int main()
 	nrf_tx_init(spi_dev_fd); 
 	nrf_print_all_registers(spi_dev_fd);
 
-	/*
+	
 	char word[31];
-	strcpy(word, "fox jumped over the blue fence");
-	nrf_tx_send_packet(spi_dev_fd, word, NUM_PAYLOAD_BYTES);
-	*/
-
+	//strcpy(word, "fox jumped over the blue fence");
+	
 	FILE * fp = fopen("img.jpg", "r");
 	send_files(spi_dev_fd, fp);
 	fclose(fp);
