@@ -548,6 +548,8 @@ void nrf_tx_init(int spi_dev_fd)
 	char reg, value;
 	char value_mb[5];
 
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
+
         value_mb[0] = 'R';
         value_mb[1] = 'x';
         value_mb[2] = 'A';
@@ -666,12 +668,11 @@ bool nrf_rx_pipe_available(int spi_dev_fd, int * pipe)
 
 void nrf_shutdown(int spi_dev_fd)
 {
-	char addr;
-	char value;
+	char reg, value;
 
 	value = 0x00;	// Power down transceiver.
-	addr = W_REGISTER | CONFIG;
-	spi_send_msg(spi_dev_fd, addr, &value, 1);
+	reg = CONFIG;
+	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	return;
 }
@@ -808,13 +809,6 @@ void send_files(int spi_dev_fd, FILE * fp)
 
 		rtn = nrf_tx_send_packet(spi_dev_fd, payload, read_size);
 
-		/*
-		if(rtn == 0)
-		{
-			printf("ACK RECEIVED \n");
-		}
-		*/
-
 		num_bytes += read_size;
 
 		//printf("num_bytes: %i \n", num_bytes);
@@ -825,6 +819,28 @@ void send_files(int spi_dev_fd, FILE * fp)
 		printf("\n");
 	}
 
+}
+
+int nrf_rx_mode(int spi_dev_fd)
+{
+	char reg, value;
+
+	reg = STATUS;
+	value = EN_CRC | CRCO | PWR_UP | PRIM_RX;	// RX mode
+	nrf_write_reg_byte(spi_dev_fd, reg, value);
+
+	return 0;
+}
+
+int nrf_tx_mode(int spi_dev_fd)
+{
+	char reg, value;
+
+	reg = STATUS;
+	value = EN_CRC | CRCO | PWR_UP;	// TX mode.
+	nrf_write_reg_byte(spi_dev_fd, reg, value);
+
+	return 0;
 }
 
 int main() 

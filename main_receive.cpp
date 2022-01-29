@@ -389,47 +389,6 @@ int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 
 }
 
-/*
-int spi_read_msg(int spi_dev_fd, char addr, char * status, char * copy_to, int len)
-{
-	char data_buffer;
-	char recv_buffer[len+1];
-	struct spi_ioc_transfer xfer[3];	
-
-	memset(&xfer, 0, sizeof(xfer));
-	memset(&recv_buffer, 0, sizeof(recv_buffer));
-
-	data_buffer = addr;
-	xfer[0].tx_buf = (unsigned long) &data_buffer;
-	xfer[0].len = 1;
-	//xfer[0].cs_change = 1;
-	xfer[0].bits_per_word = 8;
-
-	xfer[1].rx_buf = (unsigned long) recv_buffer;
-	xfer[1].len = len + 1;
-	//xfer[1].cs_change = 1;
-	xfer[1].bits_per_word = 8;
-
-	xfer[2].cs_change = 0;
-
-	int res = ioctl(spi_dev_fd, SPI_IOC_MESSAGE(3), xfer);
-
-	if(res > 0)
-	{
-		//status[0] = recv_buffer[0];
-		if(copy_to != NULL)
-		{
-			string temp = string(recv_buffer);
-			strncpy(copy_to, temp.c_str(), len);
-		}
-		
-	}
-
-	return res;
-
-}
-*/
-
 int spi_read_msg(int spi_dev_fd, char addr, char * status, char * copy_to, int len)
 {
 	char data_buffer;
@@ -587,6 +546,7 @@ void nrf_rx_init(int spi_dev_fd)
 {
 	char reg, value;
 
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);	// Setting chip enable to 0.
 	reg = EN_AA;
 	value = 0x3f;	// Turn off auto acknowledgement.
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
@@ -647,6 +607,9 @@ void nrf_rx_init(int spi_dev_fd)
 
 /**
  *	Sets the rx address of the transceiver.
+ *	For pipe > 0, only one byte needed to set 
+ *	the address. First 4 bytes copy of data pipe
+ *	0.
  *
  * 	spi_dev_fd: file descriptor for spi device.
  * */
@@ -655,10 +618,20 @@ int nrf_set_rx_address(int spi_dev_fd, char * addr, int pipe)
 	char reg;
 
 	if(pipe > 5)
+	{
+		printf("nrf_set_rx_address(): invalid data pipe.\n");
 		return 1;
+	}
 
 	reg = RX_ADDR_P0 << pipe;
-	nrf_write_reg_multi_byte(spi_dev_fd, reg, addr, 5);
+	if(pipe == 0)
+	{
+		nrf_write_reg_multi_byte(spi_dev_fd, reg, addr, 5);
+	}
+	else 
+	{
+		nrf_write_reg_multi_byte(spi_dev_fd, reg, addr, 1);
+	}
 
 	return 0;
 }
@@ -677,36 +650,6 @@ int nrf_set_tx_address(int spi_dev_fd, char * addr)
 
 	return 0;
 }
-
-/**
- *	Checks if a data pipe is available for reading.
- *
- * 	spi_dev_fd: file descriptor for spi device.
- * */
-/*
-bool nrf_rx_pipe_available(int spi_dev_fd, int * pipe)
-{
-	
-	char addr = R_REGISTER | STATUS;
-	char status;
-	char msg;
-	spi_read_msg(spi_dev_fd, addr, &status, &msg, 1);
-		
-	if((msg & RX_DR) > 0)
-	{
-		*pipe = (msg >> RX_P_NO) & 0x07;
-
-		if(*pipe > 5)
-		{
-			return 1;
-		}
-
-		return 0;
-	}
-
-	return 1;
-}
-*/
 
 bool nrf_rx_pipe_available(int spi_dev_fd, int * pipe)
 {
@@ -742,7 +685,7 @@ void nrf_shutdown(int spi_dev_fd)
 
 	value = 0x00;	// Power down transceiver.
 	addr = W_REGISTER | CONFIG;
-	spi_send_msg(spi_dev_fd, addr, &value, 1);
+	nrf_write_reg_byte(spi_dev_fd, addr, value);
 
 	return;
 }
@@ -793,10 +736,11 @@ int nrf_tx_pending_send(int spi_dev_fd)
  *
  * 	spi_dev_fd: file descriptor for spi device.
  * */
-int nrf_rx_read(int spi_dev_fd, char * payload, int * pipe, int * bytes)
+int nrf_rx_read_payload(int spi_dev_fd, char * payload, int * pipe, int * bytes)
 {
 	int pipe_temp, rtn;
 
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 1.
 	// TODO: Add timeout. 
 	do
 	{
@@ -822,7 +766,7 @@ int nrf_rx_read(int spi_dev_fd, char * payload, int * pipe, int * bytes)
 	
 		char msg;
 		msg = RX_DR;
-		spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, &msg, 1);
+		nrf_write_reg_byte(spi_dev_fd, W_REGISTER | STATUS, msg);
 
 		return 0;
 	}
@@ -840,7 +784,7 @@ int receive_file(int spi_dev_fd, int file_type)
 
 	FILE * fp = fopen("img.jpg", "w");
 	// Get the size of the file.
-	rtn = nrf_rx_read(spi_dev_fd, payload, &pipe, NULL);
+	rtn = nrf_rx_read_payload(spi_dev_fd, payload, &pipe, NULL);
 
 	size = atoi(payload);
 
@@ -848,7 +792,7 @@ int receive_file(int spi_dev_fd, int file_type)
 	while(num_bytes < size)
 	{
 		memset(payload, 0, sizeof(payload));
-		rtn = nrf_rx_read(spi_dev_fd, payload, &pipe, &bytes);
+		rtn = nrf_rx_read_payload(spi_dev_fd, payload, &pipe, &bytes);
 
 		bytes = bytes - 2;	// Need to subtract 2 cause currently losing 2 bytes.
 
@@ -865,8 +809,6 @@ int receive_file(int spi_dev_fd, int file_type)
 	}
 
 	fclose(fp);
-
-	printf("num_bytes: %i \n", num_bytes);
 
 	return 0;
 }
@@ -909,7 +851,6 @@ int main()
 	usleep(10000);
 
 
-	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);	// Setting chip enable to 0.
 	char msg_addr[5];
 	msg_addr[0] = 'R';	
 	msg_addr[1] = 'x';	
@@ -940,13 +881,12 @@ int main()
 	nrf_print_all_registers(spi_dev_fd);
 
 
-	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 1.
 	
 	char payload[64];
 	int pipe, bytes; 
 
 	printf("1\n");
-	rtn = nrf_rx_read(spi_dev_fd, payload, &pipe, &bytes);
+	rtn = nrf_rx_read_payload(spi_dev_fd, payload, &pipe, &bytes);
 
 	if(strcmp(payload, "SENDING_IMAGE") == 0)
 	{
