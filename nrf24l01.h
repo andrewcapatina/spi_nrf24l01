@@ -71,6 +71,7 @@
 #define RX_DR       0x40
 #define TX_DS       0x20
 #define MAX_RT      0x10
+#define RX_P_NO		1
 #define TX_FULL     0x01
 
 /* fifo status */
