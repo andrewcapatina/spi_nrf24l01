@@ -28,8 +28,9 @@
 
 using namespace std;
 
-#define GPIO_CE 4 
-#define GPIO_IRQ 27
+// Need to set GPIO pins based on board used.
+//#define GPIO_CE 4 
+//#define GPIO_IRQ 27
 #define GPIO_EDGE_FALL "falling"
 #define GPIO_EDGE_RISE "rising"
 #define GPIO_LVL_HIGH 0x01
@@ -45,6 +46,8 @@ using namespace std;
 #define MAX_BUF 64
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+
+#define NUM_PAYLOAD_BYTES 30
 
 /**
  *	Function to bring a selected 
@@ -367,16 +370,12 @@ int spi_send_msg(int spi_dev_fd, char addr, char * data, int len)
 	memset(&recv_buffer, 0, sizeof(recv_buffer));
 	
 	data_buffer[0] = addr;
-	//printf("BUFF addr: %x\n", data_buffer[0]);
 	for(int i = 1; i < len + 1; ++i)
 	{
 		data_buffer[i] = data[i-1];
-		//printf("BUFF: %x\n", data_buffer[i]);
 	}
 	xfer.tx_buf = (long long unsigned int) data_buffer;
-	//xfer.rx_buf = (unsigned long) &recv_buffer;
-	xfer.rx_buf = NULL;
-	//xfer.len = len + 2;
+	xfer.rx_buf = (unsigned long) NULL;
 	xfer.len = len + 1;
 	xfer.bits_per_word = 8;
 	xfer.speed_hz = 1000000;
@@ -417,10 +416,12 @@ int spi_read_msg(int spi_dev_fd, char addr, char * status, char * copy_to, int l
 		status[0] = recv_buffer[0];
 		if(copy_to != NULL)
 		{
-			string temp = string(recv_buffer);
-			temp = temp.substr(1);
-			strcpy(copy_to, temp.c_str());
+			for(int i = 0; i < len; ++i)
+			{
+				copy_to[i] = recv_buffer[i + 1];
+			}
 		}
+		
 	}
 
 	return res;
@@ -435,60 +436,57 @@ void nrf_print_all_registers(int spi_dev_fd)
 
 	memset(msg, 0, sizeof(msg));
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | CONFIG, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | CONFIG, &status, msg, 1);	
 	printf("CONFIG: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, &status, msg, 1);	
 	printf("STATUS: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | EN_AA, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | EN_AA, &status, msg, 1);	
 	printf("EN_AA: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | EN_RXADDR, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | EN_RXADDR, &status, msg, 1);	
 	printf("RX_ADDR: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_AW, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_AW, &status, msg, 1);	
 	printf("SETUP_AW: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_RETR, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | SETUP_RETR, &status, msg, 1);	
 	printf("SETUP_RETR: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | RF_CH, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | RF_CH, &status, msg, 1);	
 	printf("RF_CH: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | RF_SETUP, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | RF_SETUP, &status, msg, 1);	
 	printf("RF_SETUP: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | STATUS, &status, msg, 2);	
-	printf("STATUS: 0x%x \n", msg[0]);
-
-	spi_read_msg(spi_dev_fd, R_REGISTER | OBSERVE_TX, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | OBSERVE_TX, &status, msg, 1);	
 	printf("OBSERVE_TX: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | RPD, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | RPD, &status, msg, 1);	
 	printf("RPD: 0x%x \n", msg[0]);
 
 	memset(msg, 0, sizeof(msg));
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | RX_ADDR_P0, &status, msg, 6);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | RX_ADDR_P0, &status, msg, 5);	
 	printf("RX_ADDR_P0: 0x%x %x %x %x %x \n", msg[4], msg[3], msg[2], msg[1], msg[0]);
 
 	memset(msg, 0, sizeof(msg));
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | TX_ADDR, &status, msg, 6);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | TX_ADDR, &status, msg, 5);	
 
 	printf("TX_ADDR: 0x%x %x %x %x %x \n", msg[4], msg[3], msg[2], msg[1], msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | RX_PW_P0, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | RX_PW_P0, &status, msg, 1);	
 	printf("RX_PW_P0: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | FIFO_STATUS, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | FIFO_STATUS, &status, msg, 1);	
 	printf("FIFO_STATUS: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | DYNPD, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | DYNPD, &status, msg, 1);	
 	printf("DYNPD: 0x%x \n", msg[0]);
 
-	spi_read_msg(spi_dev_fd, R_REGISTER | FEATURE, &status, msg, 2);	
+	spi_read_msg(spi_dev_fd, R_REGISTER | FEATURE, &status, msg, 1);	
 	printf("FEATURE: 0x%x \n", msg[0]);
 
 
@@ -496,6 +494,12 @@ void nrf_print_all_registers(int spi_dev_fd)
 	return;
 }
 
+/**
+  *	Function to write a byte to memory mapped register
+  * of the transceiver.
+  *
+  *	spi_dev_fd: spi file descriptor.
+  **/
 void nrf_write_reg_byte(int spi_dev_fd, char reg, char value)
 {
 	int rtn;
@@ -508,6 +512,12 @@ void nrf_write_reg_byte(int spi_dev_fd, char reg, char value)
 	return;
 }
 
+/**
+  *	Function to write multi byte value to memory mapped register
+  * of the transceiver.
+  *
+  *	spi_dev_fd: spi file descriptor.
+  **/
 void nrf_write_reg_multi_byte(int spi_dev_fd, char reg, char * value, int len)
 {
 	int rtn;
@@ -519,6 +529,12 @@ void nrf_write_reg_multi_byte(int spi_dev_fd, char reg, char * value, int len)
 	return;
 }
 
+/**
+  *	Function to write command byte to memory mapped register
+  * of the transceiver.
+  *
+  *	spi_dev_fd: spi file descriptor.
+  **/
 void nrf_write_command_byte(int spi_dev_fd, char cmd, char value)
 {
 	int rtn;
@@ -530,6 +546,12 @@ void nrf_write_command_byte(int spi_dev_fd, char cmd, char value)
 	return;
 }
 
+/**
+  *	Function to write multi byte command to memory mapped register
+  * of the transceiver.
+  *
+  *	spi_dev_fd: spi file descriptor.
+  **/
 void nrf_write_command_multi_byte(int spi_dev_fd, char cmd, char * value, int len)
 {
 	int rtn;
@@ -541,10 +563,18 @@ void nrf_write_command_multi_byte(int spi_dev_fd, char cmd, char * value, int le
 	return;
 }
 
+/**
+ *	Initializes nrf registers 
+ *	for transmit mode.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
 void nrf_tx_init(int spi_dev_fd)
 {
 	char reg, value;
 	char value_mb[5];
+
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
 
         value_mb[0] = 'R';
         value_mb[1] = 'x';
@@ -555,7 +585,7 @@ void nrf_tx_init(int spi_dev_fd)
 	reg = TX_ADDR;
 	nrf_write_reg_multi_byte(spi_dev_fd, reg, value_mb, 5);
 
-	value = 0x01;
+	value = 0x3f;
 	reg = EN_AA;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 	
@@ -563,7 +593,7 @@ void nrf_tx_init(int spi_dev_fd)
 	reg = SETUP_AW;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
-	value = 0x02;
+	value = 0x4c;
 	reg = RF_CH;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
@@ -571,24 +601,25 @@ void nrf_tx_init(int spi_dev_fd)
 	reg = EN_RXADDR;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
-	value = 0x0f;
+	value = 0xff;
 	reg = SETUP_RETR;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
-	value = 0x01;
+	//value = 0x01;
+	value = 0x22;
 	reg = RF_SETUP;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
-	value = 32;
+	value = NUM_PAYLOAD_BYTES;
 	reg = RX_PW_P0;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
-	value = 0x01;
-	reg = DYNPD;
+	value = 0x04;
+	reg = FEATURE;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
-	value = 0x06;
-	reg = FEATURE;
+	value = 0x03;
+	reg = DYNPD;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = FLUSH_RX;
@@ -604,18 +635,23 @@ void nrf_tx_init(int spi_dev_fd)
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = CONFIG;
-	value = EN_CRC | PWR_UP;
+	value = EN_CRC | CRCO | PWR_UP;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 	
 	return;
 }
 
+/**
+ *	Initializes memory mapped registers for receive mode.
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
 void nrf_rx_init(int spi_dev_fd)
 {
 	char reg, value;
 
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);	// Setting chip enable to 0.
 	reg = EN_AA;
-	value = 0x01;	// Turn off auto acknowledgement.
+	value = 0x3f;	// Turn off auto acknowledgement.
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = SETUP_AW;
@@ -623,28 +659,33 @@ void nrf_rx_init(int spi_dev_fd)
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 	
 	reg = RF_CH;
-	value = 0x02;	// channel 2.
+	value = 0x4c;	// channel 2.
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = EN_RXADDR;
-	value = 0x01;	// Enable data pipe 0.
+	value = 0x03;	// Enable data pipe 0.
+	nrf_write_reg_byte(spi_dev_fd, reg, value);
+
+	reg = SETUP_RETR;
+	value = 0xff;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = RF_SETUP;
 	//snd_msg[0] = 0x24;
 	value = 0x01;	// 1Mbps, -12dBm power output. 
+	value = 0x22;	// 1Mbps, -12dBm power output. 
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = RX_PW_P0;
-	value = 32;	// 32 byte payload
+	value = NUM_PAYLOAD_BYTES;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 	
 	reg = DYNPD;
-	value = 0x01;	 
+	value = 0x03;	 
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = FEATURE;
-	value = 0x06;	 
+	value = 0x04;	 
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	reg = FLUSH_RX;
@@ -659,32 +700,71 @@ void nrf_rx_init(int spi_dev_fd)
 	value = RX_DR | TX_DS | MAX_RT;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 	
-	
 	reg = CONFIG;
-	value = EN_CRC | PWR_UP | PRIM_RX;
+	value = EN_CRC | CRCO | PWR_UP | PRIM_RX;
 	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 
 	return;
 }
 
+/**
+ *	Sets the rx address of the transceiver.
+ *	For pipe > 0, only one byte needed to set 
+ *	the address. First 4 bytes copy of data pipe
+ *	0.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
 int nrf_set_rx_address(int spi_dev_fd, char * addr, int pipe)
 {
 	char reg;
 
 	if(pipe > 5)
+	{
+		printf("nrf_set_rx_address(): invalid data pipe.\n");
 		return 1;
+	}
 
 	reg = RX_ADDR_P0 << pipe;
+	if(pipe == 0)
+	{
+		nrf_write_reg_multi_byte(spi_dev_fd, reg, addr, 5);
+	}
+	else 
+	{
+		nrf_write_reg_multi_byte(spi_dev_fd, reg, addr, 1);
+	}
+
+	return 0;
+}
+
+/**
+ *	Sets the tx address of the transceiver.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
+int nrf_set_tx_address(int spi_dev_fd, char * addr)
+{
+	char reg;
+
+	reg = TX_ADDR;
 	nrf_write_reg_multi_byte(spi_dev_fd, reg, addr, 5);
 
 	return 0;
 }
 
-bool nrf_pipe_available(int spi_dev_fd, int * pipe)
+/**
+  *	Function to check which data pipe is available 
+  * to read.
+  *
+  *	spi_dev_fd: spi file descriptor.
+  * pipe: available data pipe.
+  **/
+bool nrf_rx_pipe_available(int spi_dev_fd, int * pipe)
 {
 	
-	char addr = R_REGISTER | STATUS;
+	char addr = NOP;
 	char status;
 	spi_read_msg(spi_dev_fd, addr, &status, NULL, 0);
 		
@@ -703,6 +783,11 @@ bool nrf_pipe_available(int spi_dev_fd, int * pipe)
 	return 1;
 }
 
+
+/**
+ *	Shutdown the transceiver.
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
 void nrf_shutdown(int spi_dev_fd)
 {
 	char addr;
@@ -710,7 +795,7 @@ void nrf_shutdown(int spi_dev_fd)
 
 	value = 0x00;	// Power down transceiver.
 	addr = W_REGISTER | CONFIG;
-	spi_send_msg(spi_dev_fd, addr, &value, 1);
+	nrf_write_reg_byte(spi_dev_fd, addr, value);
 
 	return;
 }
@@ -734,6 +819,7 @@ int nrf_tx_new_payload(int spi_dev_fd, char * payload, int len)
  * 	if 0 is returned: send pending.
  *	If 1 is returned: TX_DS set.
  *	If 2 is returned: MAX_RT set.
+ * 	spi_dev_fd: file descriptor for spi device.
  * */
 int nrf_tx_pending_send(int spi_dev_fd)
 {
@@ -754,103 +840,219 @@ int nrf_tx_pending_send(int spi_dev_fd)
 	return 0;
 }
 
-int main() 
+/**
+ *	Reads the payload when data pipe
+ *	is available.
+ *
+ * 	spi_dev_fd: file descriptor for spi device.
+ * */
+int nrf_rx_read_payload(int spi_dev_fd, char * payload, int * pipe, int * bytes)
 {
-	unsigned int val;
-	char rising[7] = GPIO_EDGE_RISE;
-
-	const char dev[32] = "/dev/spidev0.0";
-	uint8_t mode = SPI_MODE_0;
-	uint8_t bits = 8;
-	uint32_t speed = 1000000;
-	int lsb_setting = 0;
-	int spi_dev_fd;
-	
-	// Setting (chip enable)
-	gpio_export(GPIO_CE);
-	gpio_set_dir(GPIO_CE, GPIO_DIR_OUTPUT);	// set gpio 4 as output.
-
-	// Setting (IRQ)
-	gpio_export(GPIO_IRQ);
-	gpio_set_dir(GPIO_IRQ, GPIO_DIR_INPUT);
-	gpio_set_edge(GPIO_IRQ, rising);
-	gpio_set_active_edge(GPIO_IRQ);	// set to active low
-
-	if(errno)
-		return 0;
-
-	spi_dev_fd = spi_init(dev, mode, bits, speed, lsb_setting);
-
-	char addr;
-	char shutdown_msg[2];
-	char snd_msg[3];
-	
-	shutdown_msg[0] = 0x00;
-	addr = W_REGISTER | CONFIG;
-	spi_send_msg(spi_dev_fd, addr, shutdown_msg, 1);
-
-	usleep(10000);
-
-
-	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);	// Setting chip enable to 0.
-
-	int rtn;
-
-	nrf_rx_init(spi_dev_fd); 
+	int pipe_temp, rtn;
 
 	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);	// Setting chip enable to 1.
-
-	char msg_addr[5];
-	msg_addr[0] = 'R';	
-	msg_addr[1] = 'x';	
-	msg_addr[2] = 'A';	
-	msg_addr[3] = 'A';	
-	msg_addr[4] = 'A';	
-
-	nrf_set_rx_address(spi_dev_fd, msg_addr, 0);
-
-	
-	nrf_print_all_registers(spi_dev_fd);
-
-	bool recv = false;
-	char status;
+	// TODO: Add timeout. 
 	do
 	{
-		int pipe;
-		if(nrf_pipe_available(spi_dev_fd, &pipe) == 0)
+		rtn = nrf_rx_pipe_available(spi_dev_fd, &pipe_temp);
+
+	}while(rtn != 0);
+	
+	if(rtn == 0)
+	{
+		char status;
+		
+		if(bytes != NULL)
 		{
-			printf("pipe: %i \n", pipe);
-			char recv_msg[64];
-			char size[2];
-			memset(recv_msg, 0, sizeof(recv_msg));
-
-			spi_read_msg(spi_dev_fd, R_RX_PL_WID, &status, size, 2);
-
-			spi_read_msg(spi_dev_fd, R_RX_PAYLOAD , &status, recv_msg, (int) size[1]);
-			if(recv_msg)
-			{
-				printf("recv_msg: %s \n", recv_msg);
-			}
-
-			recv = true;
-
-			snd_msg[0] = 0xf0;
-			spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, snd_msg, 1);
+			char size;
+			spi_read_msg(spi_dev_fd, R_RX_PL_WID, &status, &size, 1); 
+			*bytes = (int) size;
 		}
 
-	}while(recv == false);
+
+		spi_read_msg(spi_dev_fd, R_RX_PAYLOAD , &status, payload, (int) NUM_PAYLOAD_BYTES);
+
+		*pipe = pipe_temp;
+	
+		char msg;
+		msg = RX_DR;
+		nrf_write_reg_byte(spi_dev_fd, W_REGISTER | STATUS, msg);
+
+		return 0;
+	}
+
+	return 1;
+}
+
+/**
+ *	Function to load a payload and send a packet.
+ *
+ *
+ *	spi_dev_fd: file descriptor for spi device.
+ * */
+int nrf_tx_send_packet(int spi_dev_fd, char * payload, int len)
+{
+	int rtn; 
+	// Put low so we can add the payload.
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);
+	// Set a new payload.
+	nrf_tx_new_payload(spi_dev_fd, payload, len);
+
+	/*
+	// TODO: debug code
+	char status;
+	spi_read_msg(spi_dev_fd, W_TX_PAYLOAD, &status, payload, NUM_PAYLOAD_BYTES); 
+	for(int i = 0; i < len; ++i)
+	{
+		printf("i: %x \n", payload[i]);
+	}
+	// end debug code.
+*/
+
+	// Start tx transmission.
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_HIGH);
 
 
-	nrf_shutdown(spi_dev_fd);
+	do
+	{
+		rtn = nrf_tx_pending_send(spi_dev_fd);
 
-	// Close the SPI device file for reading and 
-	// writing.
-	close(spi_dev_fd);
+		if(rtn == 2)
+		{	
+			char clr = MAX_RT;
+			spi_send_msg(spi_dev_fd, W_REGISTER | STATUS, &clr, 1);
+		}
+	}while(rtn != 1);
 
-	// Bring back default settings for GPIO. 
-	gpio_unexport(GPIO_CE);
-	gpio_unexport(GPIO_IRQ);
-	// echo 4 > /sys/class/gpio/unexport
+	// Go back to standby mode
+	gpio_set_value((unsigned int) GPIO_CE, (unsigned int) GPIO_LVL_LOW);	// Setting chip enable to 0.
+
+	char reg = W_REGISTER | STATUS;
+	char val = RX_DR | TX_DS | MAX_RT;
+	spi_send_msg(spi_dev_fd, reg, &val, 1);
+
+	return 0;
+}
+
+/**
+  *	Function to send a file to receiver.
+  *
+  *	spi_dev_fd: spi file descriptor.
+  * fp: file descriptor/pointer.
+  **/
+void send_file(int spi_dev_fd, FILE * fp)
+{
+	int num_bytes=0, read_size, rtn, size;
+	char payload[NUM_PAYLOAD_BYTES + 1] = {0};
+
+	fseek(fp, 0, SEEK_END);
+	size = ftell(fp);
+	printf("file size: %i \n", size);
+
+	strcpy(payload, "SENDING_IMAGE");
+
+	nrf_tx_send_packet(spi_dev_fd, payload, NUM_PAYLOAD_BYTES);
+
+	memset(payload, 0, sizeof(payload));
+
+	sprintf(payload, "%i", size);
+
+	nrf_tx_send_packet(spi_dev_fd, payload, NUM_PAYLOAD_BYTES);
+
+	rewind(fp);
+	memset(payload, 0, sizeof(payload));
+	while(!feof(fp))
+	{
+		memset(payload, 0, sizeof(payload));
+		read_size = fread(payload, sizeof(char), NUM_PAYLOAD_BYTES, fp);
+
+		rtn = nrf_tx_send_packet(spi_dev_fd, payload, read_size);
+
+		num_bytes += read_size;
+
+		//printf("num_bytes: %i \n", num_bytes);
+		for(int i = 0; i < read_size; ++i)
+		{
+			printf("%x ", payload[i]);
+		}
+		printf("\n");
+	}
+
+}
+
+/**
+  *	Function to send a file to receiver.
+  *
+  *	spi_dev_fd: spi file descriptor.
+  * file_type: 0 = jpeg, 1 = video.
+  **/
+int receive_file(int spi_dev_fd, int file_type)
+{
+	int rtn;
+	char payload[64], status, msg;
+	int pipe;
+	int size=0, bytes=0, num_bytes=0;
+
+
+	FILE * fp = fopen("img.jpg", "w");
+	// Get the size of the file.
+	rtn = nrf_rx_read_payload(spi_dev_fd, payload, &pipe, NULL);
+
+	size = atoi(payload);
+
+	
+	while(num_bytes < size)
+	{
+		memset(payload, 0, sizeof(payload));
+		rtn = nrf_rx_read_payload(spi_dev_fd, payload, &pipe, &bytes);
+
+		bytes = bytes - 2;	// Need to subtract 2 cause currently losing 2 bytes.
+
+		fwrite(payload, sizeof(char), bytes, fp);
+		num_bytes += bytes;	
+		
+		for(int i = 0; i < bytes; ++i)
+		{
+			printf("%x ", payload[i]);
+		}
+
+		printf("\n");
+
+	}
+
+	fclose(fp);
+
+	return 0;
+}
+
+/**
+  *	Put transceiver into receive mode.
+  *
+  *	spi_dev_fd: spi file descriptor.
+  **/
+int nrf_rx_mode(int spi_dev_fd)
+{
+	char reg, value;
+
+	reg = STATUS;
+	value = EN_CRC | CRCO | PWR_UP | PRIM_RX;	// RX mode
+	nrf_write_reg_byte(spi_dev_fd, reg, value);
+
+	return 0;
+}
+
+/**
+  *	Put transceiver into transmit mode.
+  *
+  *	spi_dev_fd: spi file descriptor.
+  **/
+int nrf_tx_mode(int spi_dev_fd)
+{
+	char reg, value;
+
+	reg = STATUS;
+	value = EN_CRC | CRCO | PWR_UP;	// TX mode.
+	nrf_write_reg_byte(spi_dev_fd, reg, value);
 
 	return 0;
 }
