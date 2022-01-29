@@ -4,6 +4,7 @@
 #define REGISTER_MASK 0x1F
 #define R_RX_PAYLOAD  0x61
 #define W_TX_PAYLOAD  0xA0
+#define W_TX_PAYLOAD_NO_ACK 0xB0
 #define FLUSH_TX      0xE1
 #define FLUSH_RX      0xE2
 #define REUSE_TX_PL   0xE3
@@ -64,45 +65,28 @@
 #define ERX_P3      0x08
 #define ERX_P2      0x04
 #define ERX_P1      0x02
-#define ERX_P0      0x01
-
-/* setup of address width */
-#define AW          0 /* 2 bits */
-
-/* setup of auto re-transmission */
-#define ARD         4 /* 4 bits */
-#define ARC         0 /* 4 bits */
-
-/* RF setup register */
-#define PLL_LOCK    4
-#define RF_DR       3
-#define RF_PWR      1 /* 2 bits */   
+#define ERX_P0      0x01  
 
 /* general status register */
 #define RX_DR       0x40
 #define TX_DS       0x20
 #define MAX_RT      0x10
-#define RX_P_NO     1 /* 3 bits */
 #define TX_FULL     0x01
 
-/* transmit observe register */
-#define PLOS_CNT    4 /* 4 bits */
-#define ARC_CNT     0 /* 4 bits */
-
 /* fifo status */
-#define TX_REUSE    6
-#define FIFO_FULL   5
-#define TX_EMPTY    4
-#define RX_FULL     1
-#define RX_EMPTY    0
+#define TX_REUSE    0x40
+#define FIFO_FULL   0x20
+#define TX_EMPTY    0x10
+#define RX_FULL     0x2
+#define RX_EMPTY    0x1
 
 /* dynamic length */
-#define DPL_P0      0
-#define DPL_P1      1
-#define DPL_P2      2
-#define DPL_P3      3
-#define DPL_P4      4
-#define DPL_P5      5
+#define DPL_P0      0x01
+#define DPL_P1      0x02
+#define DPL_P2      0x04
+#define DPL_P3      0x08
+#define DPL_P4      0x10
+#define DPL_P5      0x20
 
 /* Payload widths */
 #define RX_WIDTH    32 	// In bytes
