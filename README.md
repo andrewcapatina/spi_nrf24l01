@@ -1,6 +1,7 @@
 
 Example to put the receiver into transmit mode:
 
+```
 int main() 
 {
 	unsigned int val;
@@ -79,9 +80,9 @@ int main()
 
 	return 0;
 }
-
+```
 Example to put the transceiver into receiver mode:
-
+```
 int main() 
 {
 	unsigned int val;
@@ -180,4 +181,5 @@ int main()
 	// echo 4 > /sys/class/gpio/unexport
 
 	return 0;
-}	
+}
+```
